@@ -20,6 +20,7 @@ from rnaseq_mvp.runner import (
     RealProcessExecutor,
     run_stage,
 )
+from rnaseq_mvp.validator import ValidationError, validate_stage
 
 DEFAULT_WORKSPACE = Path("runtime")
 app = typer.Typer(
@@ -191,9 +192,36 @@ def run(
 
 
 @app.command()
-def validate() -> None:
+def validate(
+    stage: Annotated[
+        str,
+        typer.Option("--stage", help="Frozen scientific stage, for example T2A."),
+    ],
+    run_id: Annotated[
+        str,
+        typer.Option("--run-id", help="Executed run identifier."),
+    ],
+    workspace: Annotated[
+        Path,
+        typer.Option("--workspace", help="Runtime workspace directory."),
+    ] = DEFAULT_WORKSPACE,
+) -> None:
     """Validate counts, QC, and provenance."""
-    _not_implemented()
+    repo_root = Path(__file__).resolve().parents[2]
+    try:
+        registry = DefinitionRegistry.load(repo_root / "definitions")
+        report = validate_stage(stage.upper(), run_id, workspace, registry)
+    except (KeyError, ValueError) as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=int(ExitCode.CONFIG)) from error
+    except (ValidationError, OSError) as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=int(ExitCode.VALIDATE)) from error
+
+    typer.echo(f"Validation status: {report.status}")
+    typer.echo(f"Counts: {report.counts_path}")
+    typer.echo(f"Reference traceability: {report.reference_traceability}")
+    typer.echo(f"Report: {workspace / 'runs' / run_id / 'validation_report.json'}")
 
 
 @app.command()
