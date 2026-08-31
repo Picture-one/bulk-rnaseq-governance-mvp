@@ -1,14 +1,19 @@
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
 
+import httpx
 import typer
 
 from rnaseq_mvp.constants import MVP_VERSION, ExitCode
+from rnaseq_mvp.definitions import DefinitionRegistry
+from rnaseq_mvp.downloader import DownloadError
 from rnaseq_mvp.preflight import (
     RealSystemProbe,
     run_preflight,
     write_preflight_report,
 )
+from rnaseq_mvp.prepare import PreparationError, prepare_stage
 
 DEFAULT_WORKSPACE = Path("runtime")
 app = typer.Typer(
@@ -87,9 +92,44 @@ def preflight(
 
 
 @app.command()
-def prepare() -> None:
+def prepare(
+    stage: Annotated[
+        str,
+        typer.Option("--stage", help="Frozen scientific stage, for example T2A."),
+    ],
+    workspace: Annotated[
+        Path,
+        typer.Option("--workspace", help="Runtime workspace directory."),
+    ] = DEFAULT_WORKSPACE,
+) -> None:
     """Download and verify frozen inputs."""
-    _not_implemented()
+    repo_root = Path(__file__).resolve().parents[2]
+    try:
+        registry = DefinitionRegistry.load(repo_root / "definitions")
+        with httpx.Client(
+            follow_redirects=True,
+            timeout=httpx.Timeout(60.0, connect=20.0),
+        ) as client:
+            result = prepare_stage(
+                stage.upper(),
+                workspace,
+                registry,
+                client,
+                datetime.now(timezone.utc),
+            )
+    except (KeyError, ValueError) as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=int(ExitCode.CONFIG)) from error
+    except (DownloadError, PreparationError, httpx.HTTPError, OSError) as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=int(ExitCode.PREPARE)) from error
+
+    typer.echo(f"Preparation status: {result.status}")
+    typer.echo(f"Run ID: {result.run_id}")
+    typer.echo(f"Input manifest: {result.input_manifest_path}")
+    typer.echo(f"Reference manifest: {result.reference_manifest_path}")
+    typer.echo(f"Samplesheet: {result.samplesheet_path}")
+    typer.echo(f"Parameters: {result.parameters_path}")
 
 
 @app.command()
