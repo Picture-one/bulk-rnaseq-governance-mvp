@@ -1,7 +1,16 @@
+from pathlib import Path
+from typing import Annotated
+
 import typer
 
 from rnaseq_mvp.constants import MVP_VERSION, ExitCode
+from rnaseq_mvp.preflight import (
+    RealSystemProbe,
+    run_preflight,
+    write_preflight_report,
+)
 
+DEFAULT_WORKSPACE = Path("runtime")
 app = typer.Typer(
     name="rnaseq-mvp",
     help="Governed Bulk RNA-seq FASTQ-to-counts MVP.",
@@ -22,9 +31,59 @@ def version() -> None:
 
 
 @app.command()
-def preflight() -> None:
+def preflight(
+    profile: Annotated[
+        str,
+        typer.Option(
+            "--profile",
+            help="Execution profile: local_docker or server_docker.",
+        ),
+    ] = "local_docker",
+    workspace: Annotated[
+        Path,
+        typer.Option(
+            "--workspace",
+            help="Runtime workspace directory.",
+        ),
+    ] = DEFAULT_WORKSPACE,
+) -> None:
     """Check the execution environment."""
-    _not_implemented()
+    try:
+        probe = RealSystemProbe.collect(workspace)
+        report = run_preflight(
+            profile,
+            workspace,
+            probe,
+        )
+    except ValueError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(
+            code=int(ExitCode.CONFIG)
+        ) from error
+
+    report_path = write_preflight_report(
+        report,
+        workspace,
+    )
+
+    typer.echo(
+        f"Preflight status: {report.status}"
+    )
+
+    for check in report.checks:
+        typer.echo(
+            f"{check.name}\t"
+            f"{check.status}\t"
+            f"{check.observed}\t"
+            f"{check.required}"
+        )
+
+    typer.echo(f"Report: {report_path}")
+
+    if report.status == "FAIL":
+        raise typer.Exit(
+            code=int(ExitCode.PREFLIGHT)
+        )
 
 
 @app.command()
