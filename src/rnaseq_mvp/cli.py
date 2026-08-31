@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
@@ -8,6 +9,11 @@ import typer
 from rnaseq_mvp.constants import MVP_VERSION, ExitCode
 from rnaseq_mvp.definitions import DefinitionRegistry
 from rnaseq_mvp.downloader import DownloadError
+from rnaseq_mvp.orchestrator import (
+    RealExecutionServices,
+    execute_stage,
+    stage_status,
+)
 from rnaseq_mvp.packager import PackageError, package_run
 from rnaseq_mvp.preflight import (
     RealSystemProbe,
@@ -22,6 +28,7 @@ from rnaseq_mvp.runner import (
     RealProcessExecutor,
     run_stage,
 )
+from rnaseq_mvp.smoke import run_smoke_test
 from rnaseq_mvp.validator import ValidationError, validate_stage
 
 DEFAULT_WORKSPACE = Path("runtime")
@@ -302,18 +309,110 @@ def package_command(
 
 
 @app.command()
-def status() -> None:
+def status(
+    stage: Annotated[
+        str,
+        typer.Option("--stage", help="Frozen scientific stage, for example T2A."),
+    ],
+    workspace: Annotated[
+        Path,
+        typer.Option("--workspace", help="Runtime workspace directory."),
+    ] = DEFAULT_WORKSPACE,
+    output_format: Annotated[
+        str,
+        typer.Option("--format", help="Output format: text or json."),
+    ] = "text",
+) -> None:
     """Show stage and run status."""
-    _not_implemented()
+    if output_format not in {"text", "json"}:
+        typer.echo("format must be text or json", err=True)
+        raise typer.Exit(code=int(ExitCode.CONFIG))
+    summary = stage_status(stage.upper(), workspace)
+    if output_format == "json":
+        typer.echo(json.dumps(summary.model_dump(mode="json"), sort_keys=True))
+        return
+    typer.echo(f"Stage: {summary.stage_id}")
+    typer.echo(f"Run ID: {summary.run_id or '-'}")
+    typer.echo(f"Status: {summary.status}")
+    typer.echo(f"Last error: {summary.last_error or '-'}")
+    typer.echo(f"Next action: {summary.next_action}")
+    typer.echo(f"Release allowed: {str(summary.release_allowed).lower()}")
 
 
 @app.command()
-def execute() -> None:
+def execute(
+    stage: Annotated[
+        str,
+        typer.Option("--stage", help="Frozen scientific stage, for example T2A."),
+    ],
+    profile: Annotated[
+        str,
+        typer.Option(
+            "--profile", help="Execution profile: local_docker or server_docker."
+        ),
+    ] = "server_docker",
+    workspace: Annotated[
+        Path,
+        typer.Option("--workspace", help="Runtime workspace directory."),
+    ] = DEFAULT_WORKSPACE,
+) -> None:
     """Run the automated workflow up to human review."""
-    _not_implemented()
+    repo_root = Path(__file__).resolve().parents[2]
+    try:
+        registry = DefinitionRegistry.load(repo_root / "definitions")
+        summary = execute_stage(
+            stage.upper(),
+            profile,
+            workspace,
+            RealExecutionServices(registry),
+        )
+    except (KeyError, ValueError) as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=int(ExitCode.CONFIG)) from error
+    except (DownloadError, PreparationError, httpx.HTTPError, OSError) as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=int(ExitCode.PREPARE)) from error
+    except (IntegrityError, PipelineRunError) as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=int(ExitCode.RUN)) from error
+    except ValidationError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=int(ExitCode.VALIDATE)) from error
+    typer.echo(f"Execution status: {summary.status}")
+    if summary.run_id:
+        typer.echo(f"Run ID: {summary.run_id}")
+    if summary.status == "PREFLIGHT_FAILED":
+        raise typer.Exit(code=int(ExitCode.PREFLIGHT))
+    if summary.status == "VALIDATION_FAILED":
+        raise typer.Exit(code=int(ExitCode.VALIDATE))
 
 
 @app.command(name="smoke-test")
-def smoke_test() -> None:
+def smoke_test(
+    profile: Annotated[
+        str,
+        typer.Option(
+            "--profile", help="Execution profile: local_docker or server_docker."
+        ),
+    ] = "local_docker",
+    workspace: Annotated[
+        Path,
+        typer.Option("--workspace", help="Runtime workspace directory."),
+    ] = DEFAULT_WORKSPACE,
+) -> None:
     """Run the small nf-core toolchain smoke test."""
-    _not_implemented()
+    try:
+        result = run_smoke_test(
+            profile,
+            workspace,
+            RealProcessExecutor(),
+        )
+    except (ValueError, OSError) as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=int(ExitCode.RUN)) from error
+    typer.echo(f"Smoke status: {result.status}")
+    typer.echo(f"Report: {result.report_path}")
+    typer.echo(f"Results: {result.outdir}")
+    if result.status == "FAIL":
+        typer.echo(f"Missing outputs: {','.join(result.missing_outputs)}", err=True)
+        raise typer.Exit(code=int(ExitCode.RUN))
