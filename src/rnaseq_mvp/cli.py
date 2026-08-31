@@ -14,6 +14,12 @@ from rnaseq_mvp.preflight import (
     write_preflight_report,
 )
 from rnaseq_mvp.prepare import PreparationError, prepare_stage
+from rnaseq_mvp.runner import (
+    IntegrityError,
+    PipelineRunError,
+    RealProcessExecutor,
+    run_stage,
+)
 
 DEFAULT_WORKSPACE = Path("runtime")
 app = typer.Typer(
@@ -133,9 +139,55 @@ def prepare(
 
 
 @app.command()
-def run() -> None:
+def run(
+    stage: Annotated[
+        str,
+        typer.Option("--stage", help="Frozen scientific stage, for example T2A."),
+    ],
+    run_id: Annotated[
+        str,
+        typer.Option("--run-id", help="Prepared run identifier."),
+    ],
+    profile: Annotated[
+        str,
+        typer.Option(
+            "--profile", help="Execution profile: local_docker or server_docker."
+        ),
+    ] = "server_docker",
+    workspace: Annotated[
+        Path,
+        typer.Option("--workspace", help="Runtime workspace directory."),
+    ] = DEFAULT_WORKSPACE,
+    resume: Annotated[
+        bool,
+        typer.Option("--resume/--no-resume", help="Allow Nextflow cache resume."),
+    ] = True,
+) -> None:
     """Run the pinned nf-core workflow."""
-    _not_implemented()
+    repo_root = Path(__file__).resolve().parents[2]
+    try:
+        registry = DefinitionRegistry.load(repo_root / "definitions")
+        result = run_stage(
+            stage.upper(),
+            run_id,
+            profile,
+            workspace,
+            registry,
+            RealProcessExecutor(),
+            resume,
+        )
+    except (KeyError, ValueError) as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=int(ExitCode.CONFIG)) from error
+    except (IntegrityError, PipelineRunError, OSError) as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=int(ExitCode.RUN)) from error
+
+    typer.echo(f"Run status: {result.status}")
+    typer.echo(f"Run ID: {result.run_id}")
+    typer.echo(f"Provenance: {result.provenance_path}")
+    typer.echo(f"Stdout: {result.stdout_path}")
+    typer.echo(f"Stderr: {result.stderr_path}")
 
 
 @app.command()
