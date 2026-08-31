@@ -1,0 +1,25 @@
+schema_version: "1.0"
+validation_policy_id: "bulk_rnaseq_t2_v1"
+mapping_pass_percent: 70.0
+mapping_fail_below_percent: 50.0
+rrna_warn_percent: 10.0
+mitochondrial_warn_percent: 20.0
+absolute_tolerance: 0.000001
+relative_tolerance: 0.00000001
+qc_metric_aliases:
+  overall_mapping_percent:
+    - "star_percent_uniquely_mapped"
+    - "salmon_mapping_rate"
+    - "samtools_mapped_percent"
+  rrna_percent:
+    - "rrna_percent"
+    - "ribosomal_rna_percent"
+    - "featurecounts_rrna_percent"
+  mitochondrial_percent:
+    - "mitochondrial_percent"
+    - "mt_percent"
+    - "featurecounts_mitochondrial_percent"
+  strandedness:
+    - "strandedness"
+    - "infer_experiment_strandedness"
+    - "salmon_strandedness"

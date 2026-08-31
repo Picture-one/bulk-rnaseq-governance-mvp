@@ -1,0 +1,2 @@
+sample,fastq_1,fastq_2,strandedness,seq_platform,seq_center
+K562_POLYA_REP1,raw/ENCSR000AEM/ENCFF001RED.fastq.gz,raw/ENCSR000AEM/ENCFF001RDZ.fastq.gz,reverse,ILLUMINA,CSHL

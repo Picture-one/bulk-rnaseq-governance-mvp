@@ -1,0 +1,172 @@
+{
+  "$defs": {
+    "FileDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_bytes": {
+          "exclusiveMinimum": 0,
+          "title": "Expected Bytes",
+          "type": "integer"
+        },
+        "expected_md5": {
+          "title": "Expected Md5",
+          "type": "string"
+        },
+        "file_accession": {
+          "title": "File Accession",
+          "type": "string"
+        },
+        "filename": {
+          "title": "Filename",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "R1",
+            "R2"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "url": {
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "file_accession",
+        "filename",
+        "url",
+        "expected_bytes",
+        "expected_md5"
+      ],
+      "title": "FileDefinition",
+      "type": "object"
+    },
+    "SampleDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "biological_replicate": {
+          "exclusiveMinimum": 0,
+          "title": "Biological Replicate",
+          "type": "integer"
+        },
+        "biosample_accession": {
+          "title": "Biosample Accession",
+          "type": "string"
+        },
+        "files": {
+          "items": {
+            "$ref": "#/$defs/FileDefinition"
+          },
+          "title": "Files",
+          "type": "array"
+        },
+        "library_accession": {
+          "title": "Library Accession",
+          "type": "string"
+        },
+        "sample_id": {
+          "title": "Sample Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sample_id",
+        "biological_replicate",
+        "biosample_accession",
+        "library_accession",
+        "files"
+      ],
+      "title": "SampleDefinition",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "assay": {
+      "const": "polyA plus RNA-seq",
+      "title": "Assay",
+      "type": "string"
+    },
+    "biosample": {
+      "title": "Biosample",
+      "type": "string"
+    },
+    "dataset_id": {
+      "title": "Dataset Id",
+      "type": "string"
+    },
+    "experiment_accession": {
+      "title": "Experiment Accession",
+      "type": "string"
+    },
+    "library_selection": {
+      "const": "Poly(A)+",
+      "title": "Library Selection",
+      "type": "string"
+    },
+    "organism": {
+      "const": "Homo sapiens",
+      "title": "Organism",
+      "type": "string"
+    },
+    "read_layout": {
+      "const": "paired-end",
+      "title": "Read Layout",
+      "type": "string"
+    },
+    "read_length": {
+      "exclusiveMinimum": 0,
+      "title": "Read Length",
+      "type": "integer"
+    },
+    "samples": {
+      "items": {
+        "$ref": "#/$defs/SampleDefinition"
+      },
+      "title": "Samples",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "sequencing_platform": {
+      "title": "Sequencing Platform",
+      "type": "string"
+    },
+    "source_database": {
+      "const": "ENCODE",
+      "title": "Source Database",
+      "type": "string"
+    },
+    "strandedness": {
+      "const": "reverse",
+      "title": "Strandedness",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "dataset_id",
+    "source_database",
+    "experiment_accession",
+    "organism",
+    "biosample",
+    "assay",
+    "library_selection",
+    "read_layout",
+    "read_length",
+    "strandedness",
+    "sequencing_platform",
+    "samples"
+  ],
+  "title": "DatasetDefinition",
+  "type": "object"
+}

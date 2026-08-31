@@ -1,0 +1,17 @@
+schema_version: "1.0"
+stage_id: "T2B"
+dataset_id: "ENCODE_ENCSR000AEM"
+sample_ids:
+  - "K562_POLYA_REP1"
+  - "K562_POLYA_REP2"
+reference_profile_id: "human_grch38_gencode_v50_primary"
+method_profile_id: "bulk_rnaseq_star_salmon_v1"
+validation_policy_id: "bulk_rnaseq_t2_v1"
+expected_outputs:
+  - "gene_counts_raw_estimated"
+  - "gene_tpm"
+  - "gene_lengths"
+  - "multiqc_report"
+  - "run_provenance"
+  - "pca"
+  - "sample_correlation"

@@ -1,0 +1,108 @@
+{
+  "$defs": {
+    "ReferenceFileDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_bytes": {
+          "exclusiveMinimum": 0,
+          "title": "Expected Bytes",
+          "type": "integer"
+        },
+        "expected_md5": {
+          "title": "Expected Md5",
+          "type": "string"
+        },
+        "filename": {
+          "title": "Filename",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "genome_fasta",
+            "annotation_gtf"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "url": {
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "filename",
+        "url",
+        "expected_bytes",
+        "expected_md5"
+      ],
+      "title": "ReferenceFileDefinition",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "annotation_provider": {
+      "const": "GENCODE",
+      "title": "Annotation Provider",
+      "type": "string"
+    },
+    "annotation_release": {
+      "const": "50",
+      "title": "Annotation Release",
+      "type": "string"
+    },
+    "assembly_patch": {
+      "const": "p14",
+      "title": "Assembly Patch",
+      "type": "string"
+    },
+    "assembly_scope": {
+      "const": "primary_assembly",
+      "title": "Assembly Scope",
+      "type": "string"
+    },
+    "files": {
+      "items": {
+        "$ref": "#/$defs/ReferenceFileDefinition"
+      },
+      "title": "Files",
+      "type": "array"
+    },
+    "genome_build": {
+      "const": "GRCh38",
+      "title": "Genome Build",
+      "type": "string"
+    },
+    "organism": {
+      "const": "Homo sapiens",
+      "title": "Organism",
+      "type": "string"
+    },
+    "reference_profile_id": {
+      "title": "Reference Profile Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "reference_profile_id",
+    "organism",
+    "genome_build",
+    "assembly_patch",
+    "annotation_provider",
+    "annotation_release",
+    "assembly_scope",
+    "files"
+  ],
+  "title": "ReferenceDefinition",
+  "type": "object"
+}

@@ -1,0 +1,42 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "expected_bytes": {
+      "exclusiveMinimum": 0,
+      "title": "Expected Bytes",
+      "type": "integer"
+    },
+    "expected_md5": {
+      "title": "Expected Md5",
+      "type": "string"
+    },
+    "filename": {
+      "title": "Filename",
+      "type": "string"
+    },
+    "role": {
+      "enum": [
+        "genome_fasta",
+        "annotation_gtf"
+      ],
+      "title": "Role",
+      "type": "string"
+    },
+    "url": {
+      "format": "uri",
+      "maxLength": 2083,
+      "minLength": 1,
+      "title": "Url",
+      "type": "string"
+    }
+  },
+  "required": [
+    "role",
+    "filename",
+    "url",
+    "expected_bytes",
+    "expected_md5"
+  ],
+  "title": "ReferenceFileDefinition",
+  "type": "object"
+}

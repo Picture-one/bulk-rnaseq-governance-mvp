@@ -1,0 +1,47 @@
+schema_version: "1.0"
+dataset_id: "ENCODE_ENCSR000AEM"
+source_database: "ENCODE"
+experiment_accession: "ENCSR000AEM"
+organism: "Homo sapiens"
+biosample: "K562"
+assay: "polyA plus RNA-seq"
+library_selection: "Poly(A)+"
+read_layout: "paired-end"
+read_length: 101
+strandedness: "reverse"
+sequencing_platform: "Illumina HiSeq 2000"
+samples:
+  - sample_id: "K562_POLYA_REP1"
+    biological_replicate: 1
+    biosample_accession: "ENCBS087RNA"
+    library_accession: "ENCLB055ZZZ"
+    files:
+      - role: "R1"
+        file_accession: "ENCFF001RED"
+        filename: "ENCFF001RED.fastq.gz"
+        url: "https://www.encodeproject.org/files/ENCFF001RED/@@download/ENCFF001RED.fastq.gz"
+        expected_bytes: 7668466665
+        expected_md5: "0e88b38c8d48806ee98929a5bad06fc4"
+      - role: "R2"
+        file_accession: "ENCFF001RDZ"
+        filename: "ENCFF001RDZ.fastq.gz"
+        url: "https://www.encodeproject.org/files/ENCFF001RDZ/@@download/ENCFF001RDZ.fastq.gz"
+        expected_bytes: 7848217965
+        expected_md5: "3a25713488522b0ea8a4d9635b5afa41"
+  - sample_id: "K562_POLYA_REP2"
+    biological_replicate: 2
+    biosample_accession: "ENCBS088RNA"
+    library_accession: "ENCLB056ZZZ"
+    files:
+      - role: "R1"
+        file_accession: "ENCFF001REG"
+        filename: "ENCFF001REG.fastq.gz"
+        url: "https://www.encodeproject.org/files/ENCFF001REG/@@download/ENCFF001REG.fastq.gz"
+        expected_bytes: 9397127882
+        expected_md5: "4c646fa9b822b7f52f9c2c5a9da0f5e3"
+      - role: "R2"
+        file_accession: "ENCFF001REF"
+        filename: "ENCFF001REF.fastq.gz"
+        url: "https://www.encodeproject.org/files/ENCFF001REF/@@download/ENCFF001REF.fastq.gz"
+        expected_bytes: 9670426425
+        expected_md5: "5dd317654eb81f577a0f78745a3c8e66"

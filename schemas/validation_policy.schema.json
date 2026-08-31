@@ -1,0 +1,61 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "absolute_tolerance": {
+      "title": "Absolute Tolerance",
+      "type": "number"
+    },
+    "mapping_fail_below_percent": {
+      "title": "Mapping Fail Below Percent",
+      "type": "number"
+    },
+    "mapping_pass_percent": {
+      "title": "Mapping Pass Percent",
+      "type": "number"
+    },
+    "mitochondrial_warn_percent": {
+      "title": "Mitochondrial Warn Percent",
+      "type": "number"
+    },
+    "qc_metric_aliases": {
+      "additionalProperties": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "title": "Qc Metric Aliases",
+      "type": "object"
+    },
+    "relative_tolerance": {
+      "title": "Relative Tolerance",
+      "type": "number"
+    },
+    "rrna_warn_percent": {
+      "title": "Rrna Warn Percent",
+      "type": "number"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "validation_policy_id": {
+      "title": "Validation Policy Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "validation_policy_id",
+    "mapping_pass_percent",
+    "mapping_fail_below_percent",
+    "rrna_warn_percent",
+    "mitochondrial_warn_percent",
+    "absolute_tolerance",
+    "relative_tolerance",
+    "qc_metric_aliases"
+  ],
+  "title": "ValidationPolicy",
+  "type": "object"
+}

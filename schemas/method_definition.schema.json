@@ -1,0 +1,62 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "aggregation": {
+      "const": "tximport",
+      "title": "Aggregation",
+      "type": "string"
+    },
+    "aligner": {
+      "const": "STAR",
+      "title": "Aligner",
+      "type": "string"
+    },
+    "counts_measure_type": {
+      "const": "estimated_counts_unscaled",
+      "title": "Counts Measure Type",
+      "type": "string"
+    },
+    "method_profile_id": {
+      "title": "Method Profile Id",
+      "type": "string"
+    },
+    "nextflow_version": {
+      "const": "25.10.4",
+      "title": "Nextflow Version",
+      "type": "string"
+    },
+    "pipeline_name": {
+      "const": "nf-core/rnaseq",
+      "title": "Pipeline Name",
+      "type": "string"
+    },
+    "pipeline_version": {
+      "const": "3.26.0",
+      "title": "Pipeline Version",
+      "type": "string"
+    },
+    "quantifier": {
+      "const": "Salmon",
+      "title": "Quantifier",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "method_profile_id",
+    "nextflow_version",
+    "pipeline_name",
+    "pipeline_version",
+    "aligner",
+    "quantifier",
+    "aggregation",
+    "counts_measure_type"
+  ],
+  "title": "MethodDefinition",
+  "type": "object"
+}

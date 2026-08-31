@@ -1,0 +1,60 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "dataset_id": {
+      "title": "Dataset Id",
+      "type": "string"
+    },
+    "expected_outputs": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Expected Outputs",
+      "type": "array"
+    },
+    "method_profile_id": {
+      "title": "Method Profile Id",
+      "type": "string"
+    },
+    "reference_profile_id": {
+      "title": "Reference Profile Id",
+      "type": "string"
+    },
+    "sample_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Sample Ids",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "stage_id": {
+      "enum": [
+        "T2A",
+        "T2B"
+      ],
+      "title": "Stage Id",
+      "type": "string"
+    },
+    "validation_policy_id": {
+      "title": "Validation Policy Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "stage_id",
+    "dataset_id",
+    "sample_ids",
+    "reference_profile_id",
+    "method_profile_id",
+    "validation_policy_id",
+    "expected_outputs"
+  ],
+  "title": "StageDefinition",
+  "type": "object"
+}

@@ -1,0 +1,19 @@
+schema_version: "1.0"
+reference_profile_id: "human_grch38_gencode_v50_primary"
+organism: "Homo sapiens"
+genome_build: "GRCh38"
+assembly_patch: "p14"
+annotation_provider: "GENCODE"
+annotation_release: "50"
+assembly_scope: "primary_assembly"
+files:
+  - role: "genome_fasta"
+    filename: "GRCh38.primary_assembly.genome.fa.gz"
+    url: "https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_50/GRCh38.primary_assembly.genome.fa.gz"
+    expected_bytes: 845635028
+    expected_md5: "da1a11258be075cfa7af718162c894e7"
+  - role: "annotation_gtf"
+    filename: "gencode.v50.primary_assembly.annotation.gtf.gz"
+    url: "https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_50/gencode.v50.primary_assembly.annotation.gtf.gz"
+    expected_bytes: 124650284
+    expected_md5: "289b91e5e95e8b0450d223246f10a12e"
