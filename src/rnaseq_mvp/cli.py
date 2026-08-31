@@ -8,12 +8,14 @@ import typer
 from rnaseq_mvp.constants import MVP_VERSION, ExitCode
 from rnaseq_mvp.definitions import DefinitionRegistry
 from rnaseq_mvp.downloader import DownloadError
+from rnaseq_mvp.packager import PackageError, package_run
 from rnaseq_mvp.preflight import (
     RealSystemProbe,
     run_preflight,
     write_preflight_report,
 )
 from rnaseq_mvp.prepare import PreparationError, prepare_stage
+from rnaseq_mvp.reviewer import ReviewError, record_review
 from rnaseq_mvp.runner import (
     IntegrityError,
     PipelineRunError,
@@ -225,15 +227,78 @@ def validate(
 
 
 @app.command()
-def review() -> None:
+def review(
+    stage: Annotated[
+        str,
+        typer.Option("--stage", help="Frozen scientific stage, for example T2A."),
+    ],
+    run_id: Annotated[str, typer.Option("--run-id", help="Validated run identifier.")],
+    reviewer: Annotated[str, typer.Option("--reviewer", help="Reviewer identity.")],
+    decision: Annotated[
+        str,
+        typer.Option("--decision", help="Review decision: accept or reject."),
+    ],
+    comment: Annotated[
+        str,
+        typer.Option("--comment", help="Required scientific review comment."),
+    ],
+    workspace: Annotated[
+        Path,
+        typer.Option("--workspace", help="Runtime workspace directory."),
+    ] = DEFAULT_WORKSPACE,
+) -> None:
     """Record the human review decision."""
-    _not_implemented()
+    normalized_decision = decision.lower()
+    if normalized_decision not in {"accept", "reject"}:
+        typer.echo("decision must be accept or reject", err=True)
+        raise typer.Exit(code=int(ExitCode.CONFIG))
+    try:
+        record = record_review(
+            stage.upper(),
+            run_id,
+            reviewer,
+            normalized_decision,
+            comment,
+            workspace,
+            datetime.now(timezone.utc),
+        )
+    except (ReviewError, FileExistsError, OSError) as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=int(ExitCode.REVIEW)) from error
+    typer.echo(f"Review decision: {record.decision}")
+    typer.echo(f"Reviewer: {record.reviewer}")
+    typer.echo(f"Record: {workspace / 'runs' / run_id / 'review_record.json'}")
 
 
 @app.command(name="package")
-def package_command() -> None:
+def package_command(
+    stage: Annotated[
+        str,
+        typer.Option("--stage", help="Frozen scientific stage, for example T2A."),
+    ],
+    run_id: Annotated[
+        str,
+        typer.Option("--run-id", help="Accepted run identifier."),
+    ],
+    workspace: Annotated[
+        Path,
+        typer.Option("--workspace", help="Runtime workspace directory."),
+    ] = DEFAULT_WORKSPACE,
+) -> None:
     """Create a governed release package."""
-    _not_implemented()
+    repo_root = Path(__file__).resolve().parents[2]
+    try:
+        registry = DefinitionRegistry.load(repo_root / "definitions")
+        result = package_run(stage.upper(), run_id, workspace, registry)
+    except (KeyError, ValueError) as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=int(ExitCode.CONFIG)) from error
+    except (PackageError, FileExistsError, OSError) as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=int(ExitCode.PACKAGE)) from error
+    typer.echo(f"Release status: {result.status}")
+    typer.echo(f"Release directory: {result.release_directory}")
+    typer.echo(f"Checksums: {result.checksums_path}")
 
 
 @app.command()
