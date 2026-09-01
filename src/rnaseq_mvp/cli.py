@@ -399,6 +399,20 @@ def smoke_test(
         Path,
         typer.Option("--workspace", help="Runtime workspace directory."),
     ] = DEFAULT_WORKSPACE,
+    assets_manifest: Annotated[
+        Path | None,
+        typer.Option(
+            "--assets-manifest",
+            help="YAML manifest containing local nf-core smoke-test assets.",
+        ),
+    ] = None,
+    fresh: Annotated[
+        bool,
+        typer.Option(
+            "--fresh",
+            help="Start a new Nextflow session instead of resuming the previous one.",
+        ),
+    ] = False,
 ) -> None:
     """Run the small nf-core toolchain smoke test."""
     try:
@@ -406,6 +420,8 @@ def smoke_test(
             profile,
             workspace,
             RealProcessExecutor(),
+            resume=not fresh,
+            assets_manifest=assets_manifest,
         )
     except (ValueError, OSError) as error:
         typer.echo(str(error), err=True)

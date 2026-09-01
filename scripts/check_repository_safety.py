@@ -67,7 +67,11 @@ def _files(root: Path):
     for path in root.rglob("*"):
         if not path.is_file():
             continue
-        if any(part in _IGNORED_DIRECTORIES for part in path.relative_to(root).parts):
+        relative_parts = path.relative_to(root).parts
+        if any(
+            part in _IGNORED_DIRECTORIES or part.startswith("runtime-")
+            for part in relative_parts
+        ):
             continue
         yield path
 

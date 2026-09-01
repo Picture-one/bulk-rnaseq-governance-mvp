@@ -29,3 +29,8 @@ def test_help_lists_governance_commands() -> None:
         "smoke-test",
     ):
         assert command in result.stdout
+def test_smoke_help_lists_assets_manifest_option() -> None:
+    result = runner.invoke(app, ["smoke-test", "--help"])
+
+    assert result.exit_code == 0
+    assert "--assets-manifest" in result.stdout

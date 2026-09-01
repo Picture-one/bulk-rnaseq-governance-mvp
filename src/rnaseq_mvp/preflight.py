@@ -244,6 +244,15 @@ REQUIRED_URLS = {
 }
 
 
+def container_registry_reachable(
+    *,
+    direct_http: bool,
+    docker_pull: bool,
+) -> bool:
+    """Accept either the WSL HTTP route or Docker daemon's registry route."""
+    return direct_http or docker_pull
+
+
 def _run_command(
     arguments: list[str],
     timeout_seconds: int,
@@ -344,6 +353,21 @@ class RealSystemProbe(StaticSystemProbe):
             timeout_seconds=120,
         )
 
+        reachable_urls = {
+            name: _url_reachable(url)
+            for name, url in REQUIRED_URLS.items()
+        }
+        registry_pull_ok = False
+        if not reachable_urls["container_registry"] and docker_ok:
+            registry_pull_ok, _ = _run_command(
+                ["docker", "pull", "hello-world:latest"],
+                timeout_seconds=120,
+            )
+        reachable_urls["container_registry"] = container_registry_reachable(
+            direct_http=reachable_urls["container_registry"],
+            docker_pull=registry_pull_ok,
+        )
+
         disk_free_gib = (
             shutil.disk_usage(workspace).free
             / (1024**3)
@@ -371,10 +395,7 @@ class RealSystemProbe(StaticSystemProbe):
                 else f"unavailable: {docker_output}"
             ),
             docker_hello_ok=docker_hello_ok,
-            reachable_urls={
-                name: _url_reachable(url)
-                for name, url in REQUIRED_URLS.items()
-            },
+            reachable_urls=reachable_urls,
         )
 
 

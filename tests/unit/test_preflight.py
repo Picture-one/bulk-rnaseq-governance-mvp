@@ -2,6 +2,7 @@ from pathlib import Path
 
 from rnaseq_mvp.preflight import (
     StaticSystemProbe,
+    container_registry_reachable,
     run_preflight,
 )
 
@@ -94,3 +95,8 @@ def test_preflight_rejects_unavailable_docker_cli(
     assert report.status == "FAIL"
     assert report.result("docker_version").status == "FAIL"
     assert report.result("docker_daemon").status == "FAIL"
+
+
+def test_registry_accepts_successful_docker_pull_when_wsl_https_is_blocked() -> None:
+    assert container_registry_reachable(direct_http=False, docker_pull=True) is True
+    assert container_registry_reachable(direct_http=False, docker_pull=False) is False

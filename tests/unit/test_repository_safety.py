@@ -25,3 +25,19 @@ def test_safety_scan_rejects_patient_identifier_header(tmp_path: Path) -> None:
     findings = scan_repository(tmp_path)
 
     assert [finding.rule for finding in findings] == ["patient_identifier"]
+def test_safety_scan_ignores_runtime_variant_directories(
+    tmp_path: Path,
+) -> None:
+    runtime_smoke = tmp_path / "runtime-smoke"
+    runtime_smoke.mkdir()
+
+    (runtime_smoke / "sample.fastq.gz").write_bytes(
+        b"local runtime test data"
+    )
+    (runtime_smoke / "sample.bam").write_bytes(
+        b"local runtime test data"
+    )
+
+    findings = scan_repository(tmp_path)
+
+    assert findings == []
