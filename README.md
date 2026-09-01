@@ -29,7 +29,17 @@ uv run rnaseq-mvp version
 uv run rnaseq-mvp --help
 ```
 
-运行依赖：Python 3.10–3.12、Java 17、Nextflow、Docker Engine/Docker Desktop。服务器推荐至少 64 GiB 内存；本地小型 nf-core 测试不代表能够运行完整人类 STAR 比对。
+运行依赖：Python 3.10–3.12、Java 17、Nextflow 25.10.4、Docker Engine/Docker Desktop。服务器推荐至少 64 GiB 内存；本地小型 nf-core 测试不代表能够运行完整人类 STAR 比对。
+
+## 执行 profile
+
+| Profile | 平台 | 用途 |
+|---|---|---|
+| `local_docker` | 本地 x86_64 Linux/WSL2 | 小型工具链测试；资源不足只报告 WARN |
+| `server_docker` | x86_64 Linux 服务器 | 常规服务器运行 |
+| `server_docker_arm64` | aarch64/arm64 Linux 服务器 | Docker + Wave 原生 ARM64 运行 |
+
+`server_docker_arm64` 使用 Wave 根据流程中的 Conda 依赖提供 ARM64 容器，禁止自动回退到 QEMU/amd64 模拟。本 profile 不启用远程任务执行或远程文件系统；FASTQ、参考文件、Nextflow work、counts 和 QC 结果仍位于并处理于本地服务器。
 
 ## 使用顺序
 
@@ -58,6 +68,20 @@ uv run rnaseq-mvp package --stage T2A --run-id <RUN_ID> --workspace runtime
 uv run rnaseq-mvp status --stage T2A --workspace runtime --format json
 uv run rnaseq-mvp smoke-test --profile local_docker --workspace runtime-smoke
 ```
+
+ARM64 服务器首次部署时，先完成预检和小型 smoke-test：
+
+```bash
+uv run rnaseq-mvp preflight \
+  --profile server_docker_arm64 \
+  --workspace /data/rnaseq-arm/runtime
+
+uv run rnaseq-mvp smoke-test \
+  --profile server_docker_arm64 \
+  --workspace /data/rnaseq-arm/runtime
+```
+
+只有两项均为 `PASS` 后，才运行 T2A/T2B 或其他真实人类数据。
 
 人工复核是强制门。`execute` 不会自动接受或打包结果。
 
