@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from rnaseq_mvp import preflight as preflight_module
 from rnaseq_mvp.preflight import (
     StaticSystemProbe,
     container_registry_reachable,
@@ -100,3 +101,58 @@ def test_preflight_rejects_unavailable_docker_cli(
 def test_registry_accepts_successful_docker_pull_when_wsl_https_is_blocked() -> None:
     assert container_registry_reachable(direct_http=False, docker_pull=True) is True
     assert container_registry_reachable(direct_http=False, docker_pull=False) is False
+def test_arm_server_preflight_accepts_aarch64(
+    tmp_path: Path,
+) -> None:
+    probe = StaticSystemProbe(
+        system="Linux",
+        architecture="aarch64",
+        cpus=20,
+        memory_gib=119,
+        disk_free_gib=719,
+        java_version="17.0.20",
+        nextflow_version="25.10.4",
+        docker_version="Docker version 28.3.3",
+        docker_hello_ok=True,
+        reachable_urls={
+            "github": True,
+            "encode": True,
+            "gencode": True,
+            "container_registry": True,
+            "wave": True,
+            "seqera_container_registry": True,
+            "nextflow_registry": True,
+        },
+    )
+
+    report = run_preflight(
+        "server_docker_arm64",
+        tmp_path,
+        probe,
+    )
+
+    assert report.status == "PASS"
+    assert report.result("architecture").required == "aarch64/arm64"
+def test_arm_profile_requires_wave_endpoints() -> None:
+    urls = preflight_module.required_urls_for_profile(
+        "server_docker_arm64"
+    )
+
+    assert urls["wave"] == "https://wave.seqera.io"
+    assert (
+        urls["seqera_container_registry"]
+        == "https://community.wave.seqera.io/v2/"
+    )
+    assert (
+        urls["nextflow_registry"]
+        == "https://registry.nextflow.io"
+    )
+
+
+def test_x86_profiles_do_not_require_wave_endpoints() -> None:
+    for profile in ("local_docker", "server_docker"):
+        urls = preflight_module.required_urls_for_profile(profile)
+
+        assert "wave" not in urls
+        assert "seqera_container_registry" not in urls
+        assert "nextflow_registry" not in urls

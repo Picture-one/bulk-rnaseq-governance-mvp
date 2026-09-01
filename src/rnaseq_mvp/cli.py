@@ -17,6 +17,7 @@ from rnaseq_mvp.orchestrator import (
 from rnaseq_mvp.packager import PackageError, package_run
 from rnaseq_mvp.preflight import (
     RealSystemProbe,
+    required_urls_for_profile,
     run_preflight,
     write_preflight_report,
 )
@@ -57,7 +58,10 @@ def preflight(
         str,
         typer.Option(
             "--profile",
-            help="Execution profile: local_docker or server_docker.",
+            help=(
+               "Execution profile: local_docker, server_docker, "
+               "or server_docker_arm64."
+            ),
         ),
     ] = "local_docker",
     workspace: Annotated[
@@ -70,7 +74,11 @@ def preflight(
 ) -> None:
     """Check the execution environment."""
     try:
-        probe = RealSystemProbe.collect(workspace)
+        required_urls = required_urls_for_profile(profile)
+        probe = RealSystemProbe.collect(
+            workspace,
+            required_urls,
+        )
         report = run_preflight(
             profile,
             workspace,

@@ -15,7 +15,11 @@ from pydantic import BaseModel, ConfigDict
 
 from rnaseq_mvp.manifests import atomic_write_json
 
-ProfileName = Literal["local_docker", "server_docker"]
+ProfileName = Literal[
+    "local_docker",
+    "server_docker",
+    "server_docker_arm64",
+]
 CheckStatus = Literal["PASS", "WARN", "FAIL"]
 
 
@@ -118,15 +122,30 @@ def run_preflight(
     workspace: Path,
     probe: SystemProbe,
 ) -> PreflightReport:
-    if profile not in {"local_docker", "server_docker"}:
+    server_profiles = {
+        "server_docker",
+        "server_docker_arm64",
+    }
+    supported_profiles = {
+        "local_docker",
+        *server_profiles,
+    }
+
+    if profile not in supported_profiles:
         raise ValueError(f"unsupported profile: {profile}")
 
-    resource_failure_status: Literal["WARN", "FAIL"] = (
-        "FAIL" if profile == "server_docker" else "WARN"
+    failure_status: Literal["WARN", "FAIL"] = (
+        "FAIL" if profile in server_profiles else "WARN"
     )
-    platform_failure_status: Literal["WARN", "FAIL"] = (
-        "FAIL" if profile == "server_docker" else "WARN"
-    )
+    resource_failure_status = failure_status
+    platform_failure_status = failure_status
+
+    if profile == "server_docker_arm64":
+        accepted_architectures = {"aarch64", "arm64"}
+        architecture_label = "aarch64/arm64"
+    else:
+        accepted_architectures = {"x86_64", "amd64"}
+        architecture_label = "x86_64"
 
     checks = [
         _check(
@@ -139,11 +158,11 @@ def run_preflight(
         ),
         _check(
             name="architecture",
-            passed=probe.architecture in {"x86_64", "amd64"},
+            passed=probe.architecture in accepted_architectures,
             observed=probe.architecture,
-            required="x86_64",
+            required=architecture_label,
             failure_status=platform_failure_status,
-            failure_message="x86_64 architecture is required",
+            failure_message=f"{architecture_label} architecture is required",
         ),
         _check(
             name="cpu",
@@ -243,6 +262,24 @@ REQUIRED_URLS = {
     "container_registry": "https://registry-1.docker.io/v2/",
 }
 
+ARM64_REQUIRED_URLS = {
+    "wave": "https://wave.seqera.io",
+    "seqera_container_registry": (
+        "https://community.wave.seqera.io/v2/"
+    ),
+    "nextflow_registry": "https://registry.nextflow.io",
+}
+
+
+def required_urls_for_profile(
+    profile: ProfileName,
+) -> dict[str, str]:
+    urls = dict(REQUIRED_URLS)
+
+    if profile == "server_docker_arm64":
+        urls.update(ARM64_REQUIRED_URLS)
+
+    return urls
 
 def container_registry_reachable(
     *,
@@ -320,6 +357,7 @@ class RealSystemProbe(StaticSystemProbe):
     def collect(
         cls,
         workspace: Path,
+        required_urls: dict[str, str],
     ) -> RealSystemProbe:
         workspace = workspace.expanduser().resolve()
         workspace.mkdir(parents=True, exist_ok=True)
@@ -355,7 +393,7 @@ class RealSystemProbe(StaticSystemProbe):
 
         reachable_urls = {
             name: _url_reachable(url)
-            for name, url in REQUIRED_URLS.items()
+            for name, url in required_urls.items()
         }
         registry_pull_ok = False
         if not reachable_urls["container_registry"] and docker_ok:
