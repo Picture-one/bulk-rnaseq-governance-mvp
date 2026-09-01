@@ -29,3 +29,19 @@ def test_t2a_command_is_frozen() -> None:
         "/data/rnaseq/runtime/work",
         "-resume",
     ]
+def test_arm64_command_uses_wave_profile() -> None:
+    command = build_nextflow_command(
+        stage_id="T2A",
+        run_id="T2A_20260902T040000Z",
+        profile="server_docker_arm64",
+        repo_root=Path("/opt/bulk-rnaseq-governance-mvp"),
+        workspace=Path("/data/rnaseq-arm/runtime"),
+        resume=True,
+    )
+
+    assert command[command.index("-r") + 1] == "3.26.0"
+    assert command[command.index("-profile") + 1] == "docker"
+    assert command[command.index("-c") + 1] == (
+        "/opt/bulk-rnaseq-governance-mvp/"
+        "configs/profiles/server_docker_arm64.config"
+    )

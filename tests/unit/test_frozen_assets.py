@@ -121,3 +121,24 @@ def test_t2b_samplesheet_contains_two_frozen_pairs() -> None:
             "seq_center": "CSHL",
         },
     ]
+def test_arm64_wave_profile_is_frozen() -> None:
+    config_path = (
+        REPO_ROOT
+        / "configs"
+        / "profiles"
+        / "server_docker_arm64.config"
+    )
+    config = config_path.read_text(encoding="utf-8")
+
+    required_settings = [
+        "docker.enabled = true",
+        "wave.enabled = true",
+        "wave.strategy = ['conda']",
+        "process.arch = 'linux/arm64'",
+        "cpus: 16",
+        "memory: 60.GB",
+        "time: 72.h",
+    ]
+
+    for setting in required_settings:
+        assert setting in config

@@ -87,7 +87,11 @@ def build_nextflow_command(
     workspace: Path,
     resume: bool,
 ) -> list[str]:
-    if profile not in {"local_docker", "server_docker"}:
+    if profile not in {
+        "local_docker",
+        "server_docker",
+        "server_docker_arm64",
+    }:
         raise ValueError(f"unsupported execution profile: {profile}")
     command = [
         "nextflow",
