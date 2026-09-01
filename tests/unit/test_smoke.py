@@ -66,6 +66,47 @@ def test_smoke_uses_pinned_versions_and_verifies_outputs(
     assert executor.args[executor.args.index("--validate_params") + 1] == "false"
 
 
+def test_arm64_smoke_uses_wave_config(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        Path,
+        "home",
+        classmethod(lambda cls: tmp_path / "uncached-home"),
+    )
+    executor = SmokeExecutor()
+
+    result = run_smoke_test(
+        "server_docker_arm64",
+        tmp_path,
+        executor,
+        now=datetime(
+            2026,
+            9,
+            2,
+            4,
+            0,
+            tzinfo=timezone.utc,
+        ),
+    )
+
+    assert result.status == "PASS"
+    assert executor.args is not None
+    assert (
+        executor.args[
+            executor.args.index("-profile") + 1
+        ]
+        == "test,docker"
+    )
+    config_path = Path(
+        executor.args[
+            executor.args.index("-c") + 1
+        ]
+    )
+    assert config_path.name == "server_docker_arm64.config"
+
+
 class EmptySuccessExecutor:
     def run(self, args, cwd, env, stdout_path, stderr_path):
         stdout_path.parent.mkdir(parents=True, exist_ok=True)

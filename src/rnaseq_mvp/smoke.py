@@ -120,7 +120,11 @@ def run_smoke_test(
     resume: bool = True,
     assets_manifest: Path | None = None,
 ) -> SmokeTestResult:
-    if profile not in {"local_docker", "server_docker"}:
+    if profile not in {
+        "local_docker",
+        "server_docker",
+        "server_docker_arm64",
+    }:
         raise ValueError(f"unsupported execution profile: {profile}")
     timestamp = now or datetime.now(timezone.utc)
     if timestamp.tzinfo is None:
@@ -175,9 +179,20 @@ def run_smoke_test(
         ]:
             command.extend([option, str(path)])
     if profile == "local_docker":
-        command.extend(
-            ["-c", str(repo_root / "configs" / "profiles" / "smoke_local.config")]
+        config_name = "smoke_local.config"
+    elif profile == "server_docker_arm64":
+        config_name = "server_docker_arm64.config"
+    else:
+        config_name = None
+
+    if config_name is not None:
+        config_path = (
+            repo_root
+            / "configs"
+            / "profiles"
+            / config_name
         )
+        command.extend(["-c", str(config_path)])
     if resume:
         command.append("-resume")
     environment = os.environ.copy()

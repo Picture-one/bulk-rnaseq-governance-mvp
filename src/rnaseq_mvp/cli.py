@@ -169,7 +169,11 @@ def run(
     profile: Annotated[
         str,
         typer.Option(
-            "--profile", help="Execution profile: local_docker or server_docker."
+            "--profile",
+            help=(
+                "Execution profile: local_docker, server_docker, "
+                "or server_docker_arm64."
+            ),
         ),
     ] = "server_docker",
     workspace: Annotated[
@@ -356,7 +360,11 @@ def execute(
     profile: Annotated[
         str,
         typer.Option(
-            "--profile", help="Execution profile: local_docker or server_docker."
+            "--profile",
+            help=(
+                "Execution profile: local_docker, server_docker, "
+                "or server_docker_arm64."
+            ),
         ),
     ] = "server_docker",
     workspace: Annotated[
@@ -400,7 +408,11 @@ def smoke_test(
     profile: Annotated[
         str,
         typer.Option(
-            "--profile", help="Execution profile: local_docker or server_docker."
+            "--profile",
+            help=(
+                "Execution profile: local_docker, server_docker, "
+                "or server_docker_arm64."
+            ),
         ),
     ] = "local_docker",
     workspace: Annotated[
