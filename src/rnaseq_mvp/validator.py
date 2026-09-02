@@ -195,6 +195,109 @@ def _metric_value(
             return alias, sample_metrics[alias]
     return None, None
 
+def _saved_raw_sample(
+    payload: dict,
+    section_name: str,
+    sample_id: str,
+) -> dict:
+    raw = payload.get("report_saved_raw_data", {})
+    if not isinstance(raw, dict):
+        return {}
+    section = raw.get(section_name, {})
+    if not isinstance(section, dict):
+        return {}
+    sample = section.get(sample_id, {})
+    return sample if isinstance(sample, dict) else {}
+
+
+def _saved_raw_qc_metrics(
+    payload: dict,
+    sample_id: str,
+) -> dict[str, tuple[str, object]]:
+    metrics: dict[str, tuple[str, object]] = {}
+
+    star = _saved_raw_sample(
+        payload,
+        "multiqc_star",
+        sample_id,
+    )
+    uniquely_mapped = star.get("uniquely_mapped_percent")
+    if isinstance(uniquely_mapped, (int, float)):
+        metrics["overall_mapping_percent"] = (
+            "multiqc_star.uniquely_mapped_percent",
+            uniquely_mapped,
+        )
+
+    biotypes = _saved_raw_sample(
+        payload,
+        "multiqc_featurecounts_biotype_plot",
+        sample_id,
+    )
+    numeric_biotypes = {
+        str(name): float(value)
+        for name, value in biotypes.items()
+        if isinstance(value, (int, float))
+    }
+    total_biotype = sum(numeric_biotypes.values())
+    if total_biotype > 0:
+        rrna_count = sum(
+            value
+            for name, value in numeric_biotypes.items()
+            if "rrna" in name.lower()
+        )
+        metrics["rrna_percent"] = (
+            "multiqc_featurecounts_biotype_plot.rrna_fraction",
+            100 * rrna_count / total_biotype,
+        )
+
+    idxstats = _saved_raw_sample(
+        payload,
+        "multiqc_samtools_idxstats",
+        sample_id,
+    )
+    mapped_by_contig = {
+        str(contig): float(values[0])
+        for contig, values in idxstats.items()
+        if isinstance(values, list)
+        and values
+        and isinstance(values[0], (int, float))
+    }
+    total_mapped = sum(mapped_by_contig.values())
+    mitochondrial_contig = next(
+        (
+            contig
+            for contig in mapped_by_contig
+            if contig.lower() in {"chrm", "mt"}
+        ),
+        None,
+    )
+    if mitochondrial_contig is not None and total_mapped > 0:
+        metrics["mitochondrial_percent"] = (
+            f"multiqc_samtools_idxstats.{mitochondrial_contig}",
+            100
+            * mapped_by_contig[mitochondrial_contig]
+            / total_mapped,
+        )
+
+    strand = _saved_raw_sample(
+        payload,
+        "multiqc_strand_check_summary_table",
+        sample_id,
+    )
+    for key in (
+        "rseqc_inferred",
+        "provided",
+        "salmon_inferred",
+    ):
+        value = strand.get(key)
+        if isinstance(value, str) and value not in {"", "-"}:
+            metrics["strandedness"] = (
+                f"multiqc_strand_check_summary_table.{key}",
+                value,
+            )
+            break
+
+    return metrics
 
 def extract_qc_metrics(
     results_dir: Path,
@@ -217,8 +320,20 @@ def extract_qc_metrics(
     )
     for sample_id in sample_ids:
         sample_metrics = stats.get(sample_id, {})
+        saved_raw_metrics = _saved_raw_qc_metrics(
+            payload,
+            sample_id,
+        )
         for metric in metric_names:
-            source_key, raw_value = _metric_value(sample_metrics, aliases.get(metric, []))
+            source_key, raw_value = _metric_value(
+                sample_metrics,
+                aliases.get(metric, []),
+            )
+            if source_key is None:
+                source_key, raw_value = saved_raw_metrics.get(
+                    metric,
+                    (None, None),
+                )
             if source_key is None:
                 output.append(
                     QcMetric(
@@ -318,7 +433,7 @@ def validate_stage(
         "multiqc_data": results_dir
         / "multiqc"
         / "star_salmon"
-        / "multiqc_data"
+        / "multiqc_report_data"
         / "multiqc_data.json",
     }
     missing = [name for name, path in required.items() if not path.is_file()]

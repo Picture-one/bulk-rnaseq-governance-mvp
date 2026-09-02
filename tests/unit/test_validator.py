@@ -125,3 +125,75 @@ def test_qc_thresholds_and_missing_metrics(tmp_path: Path) -> None:
     assert keyed[("WARN_SAMPLE", "strandedness")].status == "WARN"
     assert keyed[("FAIL_SAMPLE", "rrna_percent")].status == "WARN"
     assert keyed[("FAIL_SAMPLE", "rrna_percent")].message == "metric_not_reported"
+def test_qc_metrics_support_nfcore_326_saved_raw_data(
+    tmp_path: Path,
+) -> None:
+    data_directory = tmp_path / "multiqc_data"
+    data_directory.mkdir()
+
+    sample = "K562_POLYA_REP1"
+    payload = {
+        "report_general_stats_data": [{sample: {}}],
+        "report_saved_raw_data": {
+            "multiqc_star": {
+                sample: {
+                    "uniquely_mapped_percent": 81.1,
+                }
+            },
+            "multiqc_featurecounts_biotype_plot": {
+                sample: {
+                    "protein_coding": 90,
+                    "rRNA": 2,
+                    "rRNA_pseudogene": 1,
+                    "Mt_rRNA": 3,
+                    "Mt_tRNA": 4,
+                }
+            },
+            "multiqc_samtools_idxstats": {
+                sample: {
+                    "chr1": [90, 248956422],
+                    "chrM": [10, 16569],
+                }
+            },
+            "multiqc_strand_check_summary_table": {
+                sample: {
+                    "provided": "reverse",
+                    "rseqc_inferred": "reverse",
+                    "status": "pass",
+                }
+            },
+        },
+    }
+    (data_directory / "multiqc_data.json").write_text(
+        json.dumps(payload),
+        encoding="utf-8",
+    )
+
+    aliases = {
+        "overall_mapping_percent": [
+            "star_percent_uniquely_mapped"
+        ],
+        "rrna_percent": ["rrna_percent"],
+        "mitochondrial_percent": ["mitochondrial_percent"],
+        "strandedness": ["strandedness"],
+    }
+
+    metrics = extract_qc_metrics(
+        tmp_path,
+        [sample],
+        aliases=aliases,
+        mapping_pass_percent=70,
+        mapping_fail_below_percent=50,
+        rrna_warn_percent=10,
+        mitochondrial_warn_percent=20,
+    )
+    keyed = {metric.metric: metric for metric in metrics}
+
+    assert keyed["overall_mapping_percent"].value == 81.1
+    assert keyed["overall_mapping_percent"].status == "PASS"
+    assert keyed["rrna_percent"].value == 6.0
+    assert keyed["rrna_percent"].status == "PASS"
+    assert keyed["mitochondrial_percent"].value == 10.0
+    assert keyed["mitochondrial_percent"].status == "PASS"
+    assert keyed["strandedness"].value == "reverse"
+    assert keyed["strandedness"].status == "PASS"

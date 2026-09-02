@@ -14,7 +14,7 @@ def test_validate_stage_writes_reports_and_awaits_review(tmp_path: Path) -> None
     results = tmp_path / "results" / "T2A" / run_id
     star = results / "star_salmon"
     multiqc = results / "multiqc" / "star_salmon"
-    data = multiqc / "multiqc_data"
+    data = multiqc / "multiqc_report_data"
     star.mkdir(parents=True)
     data.mkdir(parents=True)
     counts = (
