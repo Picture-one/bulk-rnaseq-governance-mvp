@@ -156,3 +156,16 @@ def test_x86_profiles_do_not_require_wave_endpoints() -> None:
         assert "wave" not in urls
         assert "seqera_container_registry" not in urls
         assert "nextflow_registry" not in urls
+
+
+def test_network_probe_accepts_reachable_redirecting_endpoint(
+    httpx_mock,
+) -> None:
+    httpx_mock.add_response(
+        method="HEAD",
+        url="https://wave.seqera.io",
+        status_code=301,
+        headers={"Location": "https://seqera.io/wave/"},
+    )
+
+    assert preflight_module._url_reachable("https://wave.seqera.io") is True

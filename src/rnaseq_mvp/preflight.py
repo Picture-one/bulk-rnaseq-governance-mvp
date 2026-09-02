@@ -338,7 +338,7 @@ def _read_memory_gib() -> float:
 def _url_reachable(url: str) -> bool:
     try:
         with httpx.Client(
-            follow_redirects=True,
+            follow_redirects=False,
             timeout=20.0,
         ) as client:
             response = client.head(url)
