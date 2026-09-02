@@ -5,6 +5,8 @@ import gzip
 import json
 import math
 import re
+import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, TextIO
 
@@ -401,19 +403,87 @@ def _reference_is_traced(reference_manifest: Path, gtf_path: Path) -> bool:
         and hash_file(gtf_path, "sha256") == row.get("sha256")
     )
 
+def _archive_validation_artifacts(
+    run_directory: Path,
+    reason: str,
+) -> Path:
+    timestamp = datetime.now(timezone.utc).strftime(
+        "%Y%m%dT%H%M%S%fZ"
+    )
+    history_directory = (
+        run_directory
+        / "validation_history"
+        / timestamp
+    )
+    history_directory.mkdir(parents=True)
+
+    for filename in (
+        "validation_report.json",
+        "qc_metrics.tsv",
+        "validation_summary.tsv",
+    ):
+        source = run_directory / filename
+        if source.is_file():
+            shutil.copy2(
+                source,
+                history_directory / filename,
+            )
+
+    (
+        history_directory / "revalidation_reason.txt"
+    ).write_text(
+        f"{reason}\n",
+        encoding="utf-8",
+    )
+    return history_directory
 
 def validate_stage(
     stage_id: str,
     run_id: str,
     workspace: Path,
     registry: DefinitionRegistry,
+    *,
+    revalidate: bool = False,
+    reason: str | None = None,
 ) -> ValidationReport:
     paths = WorkspacePaths.from_root(workspace)
     run_directory = paths.runs / run_id
     state_store = StateStore(paths.root)
     state = state_store.load(run_id)
-    if state.stage_id != stage_id or state.status != RunStatus.EXECUTED:
-        raise ValidationError("validation requires the matching EXECUTED run")
+    state = state_store.load(run_id)
+    is_revalidation = (
+        revalidate
+        and state.status == RunStatus.AWAITING_REVIEW
+    )
+    is_initial_validation = (
+        not revalidate
+        and state.status == RunStatus.EXECUTED
+    )
+
+    if (
+        state.stage_id != stage_id
+        or not (is_initial_validation or is_revalidation)
+    ):
+        raise ValidationError(
+            "validation requires an EXECUTED run, or an "
+            "unreviewed AWAITING_REVIEW run with revalidate enabled"
+        )
+
+    revalidation_reason: str | None = None
+    if is_revalidation:
+        if (run_directory / "review_record.json").exists():
+            raise ValidationError(
+                "reviewed runs cannot be revalidated"
+            )
+        revalidation_reason = (reason or "").strip()
+        if not revalidation_reason:
+            raise ValidationError(
+                "revalidation reason must not be blank"
+            )
+        _archive_validation_artifacts(
+            run_directory,
+            revalidation_reason,
+        )
     stage = registry.stage(stage_id)
     dataset = registry.dataset(stage.dataset_id)
     policy = registry.validation(stage.validation_policy_id)
@@ -508,15 +578,47 @@ def validate_stage(
         ),
     ]
     write_tsv(run_directory / "validation_summary.tsv", summary_rows)
-    if status == "PASS":
-        state_store.transition(run_id, RunStatus.VALIDATED_PASS)
-        state_store.transition(run_id, RunStatus.AWAITING_REVIEW)
-    elif status == "WARN":
-        state_store.transition(run_id, RunStatus.VALIDATED_WITH_WARNINGS)
-        state_store.transition(run_id, RunStatus.AWAITING_REVIEW)
+    if not is_revalidation:
+        if status == "PASS":
+            state_store.transition(
+                run_id,
+                RunStatus.VALIDATED_PASS,
+            )
+            state_store.transition(
+                run_id,
+                RunStatus.AWAITING_REVIEW,
+            )
+        elif status == "WARN":
+            state_store.transition(
+                run_id,
+                RunStatus.VALIDATED_WITH_WARNINGS,
+            )
+            state_store.transition(
+                run_id,
+                RunStatus.AWAITING_REVIEW,
+            )
+        else:
+            state_store.transition(
+                run_id,
+                RunStatus.VALIDATION_FAILED,
+            )
+    elif status == "FAIL":
+        state_store.transition(
+            run_id,
+            RunStatus.VALIDATION_FAILED,
+        )
+    logger = RunLogger(run_directory, run_id)
+    if is_revalidation:
+        logger.event(
+            "validate",
+            "scientific_revalidation_completed",
+            status,
+            reason=revalidation_reason,
+        )
     else:
-        state_store.transition(run_id, RunStatus.VALIDATION_FAILED)
-    RunLogger(run_directory, run_id).event(
-        "validate", "scientific_validation_completed", status
-    )
+        logger.event(
+            "validate",
+            "scientific_validation_completed",
+            status,
+        )
     return report

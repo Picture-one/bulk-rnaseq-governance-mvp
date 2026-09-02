@@ -60,6 +60,7 @@ ALLOWED_TRANSITIONS: dict[RunStatus, set[RunStatus]] = {
     RunStatus.AWAITING_REVIEW: {
         RunStatus.REVIEW_ACCEPTED,
         RunStatus.REVIEW_REJECTED,
+        RunStatus.VALIDATION_FAILED,
     },
     RunStatus.REVIEW_ACCEPTED: {
         RunStatus.PACKAGED,

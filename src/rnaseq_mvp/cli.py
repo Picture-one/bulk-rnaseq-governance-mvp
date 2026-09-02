@@ -244,6 +244,72 @@ def validate(
     typer.echo(f"Reference traceability: {report.reference_traceability}")
     typer.echo(f"Report: {workspace / 'runs' / run_id / 'validation_report.json'}")
 
+@app.command()
+def revalidate(
+    stage: Annotated[
+        str,
+        typer.Option(
+            "--stage",
+            help="Frozen scientific stage, for example T2A.",
+        ),
+    ],
+    run_id: Annotated[
+        str,
+        typer.Option(
+            "--run-id",
+            help="Unreviewed validated run identifier.",
+        ),
+    ],
+    reason: Annotated[
+        str,
+        typer.Option(
+            "--reason",
+            help="Required reason for controlled revalidation.",
+        ),
+    ],
+    workspace: Annotated[
+        Path,
+        typer.Option(
+            "--workspace",
+            help="Runtime workspace directory.",
+        ),
+    ] = DEFAULT_WORKSPACE,
+) -> None:
+    """Revalidate an unreviewed run while preserving history."""
+    repo_root = Path(__file__).resolve().parents[2]
+    try:
+        registry = DefinitionRegistry.load(
+            repo_root / "definitions"
+        )
+        report = validate_stage(
+            stage.upper(),
+            run_id,
+            workspace,
+            registry,
+            revalidate=True,
+            reason=reason,
+        )
+    except (KeyError, ValueError) as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(
+            code=int(ExitCode.CONFIG)
+        ) from error
+    except (ValidationError, OSError) as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(
+            code=int(ExitCode.VALIDATE)
+        ) from error
+
+    typer.echo(f"Revalidation status: {report.status}")
+    typer.echo(f"Counts: {report.counts_path}")
+    typer.echo(
+        "Reference traceability: "
+        f"{report.reference_traceability}"
+    )
+    typer.echo(
+        "Report: "
+        f"{workspace / 'runs' / run_id / 'validation_report.json'}"
+    )
 
 @app.command()
 def review(

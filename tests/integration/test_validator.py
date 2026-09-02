@@ -7,7 +7,7 @@ from rnaseq_mvp.state import RunStatus, StateStore
 from rnaseq_mvp.validator import validate_stage
 
 
-def test_validate_stage_writes_reports_and_awaits_review(tmp_path: Path) -> None:
+def test_validate_and_revalidate_stage_preserves_history(tmp_path: Path) -> None:
     run_id = "T2A_20260901T013000Z"
     run_directory = tmp_path / "runs" / run_id
     run_directory.mkdir(parents=True)
@@ -75,3 +75,67 @@ def test_validate_stage_writes_reports_and_awaits_review(tmp_path: Path) -> None
     assert (run_directory / "validation_summary.tsv").is_file()
     assert (run_directory / "qc_metrics.tsv").is_file()
     assert store.load(run_id).status == RunStatus.AWAITING_REVIEW
+    report_path = run_directory / "validation_report.json"
+    previous_report = report_path.read_text(encoding="utf-8")
+
+    revalidated = validate_stage(
+        "T2A",
+        run_id,
+        tmp_path,
+        registry,
+        revalidate=True,
+        reason="MultiQC 3.26 parser compatibility fix",
+    )
+
+    assert revalidated.status == "PASS"
+    assert store.load(run_id).status == RunStatus.AWAITING_REVIEW
+
+    history_root = run_directory / "validation_history"
+    history_directories = sorted(
+        path for path in history_root.iterdir() if path.is_dir()
+    )
+    assert len(history_directories) == 1
+
+    archived = history_directories[0]
+    assert (
+        archived / "validation_report.json"
+    ).read_text(encoding="utf-8") == previous_report
+    assert (archived / "qc_metrics.tsv").is_file()
+    assert (archived / "validation_summary.tsv").is_file()
+    assert (
+        archived / "revalidation_reason.txt"
+    ).read_text(encoding="utf-8") == (
+        "MultiQC 3.26 parser compatibility fix\n"
+    )
+    invalid_counts = (
+        "gene_id\tgene_name\tK562_POLYA_REP1\n"
+        "ENSG000001.1\tGENE1\t-1\n"
+    )
+    (
+        star / "salmon.merged.gene_counts.tsv"
+    ).write_text(
+        invalid_counts,
+        encoding="utf-8",
+    )
+
+    failed_revalidation = validate_stage(
+        "T2A",
+        run_id,
+        tmp_path,
+        registry,
+        revalidate=True,
+        reason="Test failed revalidation handling",
+    )
+
+    assert failed_revalidation.status == "FAIL"
+    assert (
+        store.load(run_id).status
+        == RunStatus.VALIDATION_FAILED
+    )
+
+    history_directories = sorted(
+        path
+        for path in history_root.iterdir()
+        if path.is_dir()
+    )
+    assert len(history_directories) == 2
