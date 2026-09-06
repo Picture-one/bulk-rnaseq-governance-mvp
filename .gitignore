@@ -27,3 +27,4 @@ containers/
 *.key
 *.pem
 .env
+.worktrees/
