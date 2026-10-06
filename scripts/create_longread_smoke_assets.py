@@ -10,23 +10,25 @@ def create_assets(output_dir: Path) -> None:
     fasta = output_dir / "reference.fa"
     gtf = output_dir / "annotation.gtf"
     samplesheet = output_dir / "longread_samplesheet.csv"
+    sequence = "ACGT" * 200
+    quality = "I" * len(sequence)
 
     fastq.write_text(
         "@read1\n"
-        "ACGTACGTACGTACGTACGTACGTACGT\n"
+        f"{sequence}\n"
         "+\n"
-        "IIIIIIIIIIIIIIIIIIIIIIIIIIII\n",
+        f"{quality}\n",
         encoding="utf-8",
     )
     fasta.write_text(
         ">chr1\n"
-        "ACGTACGTACGTACGTACGTACGTACGT\n",
+        f"{sequence}\n",
         encoding="utf-8",
     )
     gtf.write_text(
-        'chr1\tSMOKE\tgene\t1\t28\t.\t+\t.\tgene_id "ENSGSMOKE000001.1"; '
+        f'chr1\tSMOKE\tgene\t1\t{len(sequence)}\t.\t+\t.\tgene_id "ENSGSMOKE000001.1"; '
         'gene_name "SMOKE1";\n'
-        'chr1\tSMOKE\texon\t1\t28\t.\t+\t.\tgene_id "ENSGSMOKE000001.1"; '
+        f'chr1\tSMOKE\texon\t1\t{len(sequence)}\t.\t+\t.\tgene_id "ENSGSMOKE000001.1"; '
         'gene_name "SMOKE1"; transcript_id "ENSTSMOKE000001.1";\n',
         encoding="utf-8",
     )
