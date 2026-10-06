@@ -1,7 +1,15 @@
 import json
 from pathlib import Path
 
-from rnaseq_mvp.validator import extract_qc_metrics, validate_counts
+import pytest
+
+from rnaseq_mvp.models import MethodDefinition
+from rnaseq_mvp.validator import (
+    ValidationError,
+    extract_qc_metrics,
+    required_artifacts_for_method,
+    validate_counts,
+)
 
 
 def _gtf(path: Path) -> Path:
@@ -125,3 +133,71 @@ def test_qc_thresholds_and_missing_metrics(tmp_path: Path) -> None:
     assert keyed[("WARN_SAMPLE", "strandedness")].status == "WARN"
     assert keyed[("FAIL_SAMPLE", "rrna_percent")].status == "WARN"
     assert keyed[("FAIL_SAMPLE", "rrna_percent")].message == "metric_not_reported"
+
+
+def test_shortread_star_salmon_artifact_contract_is_unchanged(tmp_path: Path) -> None:
+    method = MethodDefinition(
+        schema_version="1.0",
+        method_profile_id="bulk_rnaseq_star_salmon_v1",
+        method_family="shortread_star_salmon",
+        nextflow_version="25.10.4",
+        pipeline_name="nf-core/rnaseq",
+        pipeline_version="3.26.0",
+        aligner="STAR",
+        quantifier="Salmon",
+        aggregation="tximport",
+        counts_measure_type="estimated_counts_unscaled",
+    )
+
+    artifacts = required_artifacts_for_method(tmp_path, method)
+
+    assert artifacts["counts"] == tmp_path / "star_salmon" / "salmon.merged.gene_counts.tsv"
+    assert artifacts["multiqc_report"] == (
+        tmp_path / "multiqc" / "star_salmon" / "multiqc_report.html"
+    )
+
+
+def test_longread_gene_counts_artifact_contract_uses_longread_postprocess(
+    tmp_path: Path,
+) -> None:
+    method = MethodDefinition(
+        schema_version="1.0",
+        method_profile_id="longread_rnaseq_minimap2_gene_counts_v1",
+        method_family="longread_gene_counts",
+        nextflow_version=None,
+        pipeline_name="custom-longread-gene-counts",
+        pipeline_version="0.1.0",
+        aligner="minimap2",
+        quantifier="featureCounts",
+        aggregation="gene_assignment",
+        counts_measure_type="assigned_longread_gene_counts",
+    )
+
+    artifacts = required_artifacts_for_method(tmp_path, method)
+
+    assert artifacts["counts"] == tmp_path / "longread" / "gene_counts_raw.tsv"
+    assert artifacts["alignment_summary"] == (
+        tmp_path / "longread" / "alignment_summary.tsv"
+    )
+    assert artifacts["longread_qc_metrics"] == (
+        tmp_path / "longread" / "longread_qc_metrics.tsv"
+    )
+    assert artifacts["provenance"] == tmp_path / "longread" / "provenance.json"
+
+
+def test_unknown_method_family_rejected_by_validator(tmp_path: Path) -> None:
+    method = MethodDefinition.model_construct(
+        schema_version="1.0",
+        method_profile_id="broken",
+        method_family="unexpected",
+        nextflow_version=None,
+        pipeline_name="custom-longread-gene-counts",
+        pipeline_version="0.1.0",
+        aligner="minimap2",
+        quantifier="featureCounts",
+        aggregation="gene_assignment",
+        counts_measure_type="assigned_longread_gene_counts",
+    )
+
+    with pytest.raises(ValidationError, match="unsupported method_family"):
+        required_artifacts_for_method(tmp_path, method)

@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Long-read RNA-seq MVP：服务器补充与真实 FASTQ→counts 流程实施方案</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+      line-height: 1.65;
+      color: #1f2937;
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 32px 24px 64px;
+      background: #f8fafc;
+    }
+    main {
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      padding: 32px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+    }
+    h1, h2, h3 { color: #0f172a; line-height: 1.28; }
+    h1 { font-size: 30px; margin-top: 0; }
+    h2 { font-size: 23px; border-top: 1px solid #e5e7eb; padding-top: 28px; margin-top: 36px; }
+    h3 { font-size: 18px; margin-top: 24px; }
+    code, pre {
+      font-family: "Cascadia Mono", "Consolas", monospace;
+      font-size: 14px;
+    }
+    pre {
+      background: #0f172a;
+      color: #e5e7eb;
+      padding: 16px;
+      border-radius: 12px;
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid #e5e7eb;
+      padding: 10px 12px;
+      vertical-align: top;
+    }
+    th { background: #f1f5f9; text-align: left; }
+    .note {
+      border-left: 4px solid #2563eb;
+      background: #eff6ff;
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin: 16px 0;
+    }
+    .warn {
+      border-left: 4px solid #f59e0b;
+      background: #fffbeb;
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin: 16px 0;
+    }
+    .ok { color: #047857; font-weight: 600; }
+    .no { color: #b91c1c; font-weight: 600; }
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #e0f2fe;
+      color: #075985;
+      font-size: 12px;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Long-read RNA-seq MVP：服务器补充与真实 FASTQ→counts 流程实施方案</h1>
+  <p><strong>日期：</strong>2026-10-06</p>
+  <p><strong>适用项目：</strong><code>bulk-rnaseq-governance-mvp</code></p>
+
+  <div class="note">
+    <strong>一句话结论：</strong>目前 long-read 已完成的是“本地代码结构接入”和“治理框架骨架”，不能默认服务器已经完成。服务器需要先同步这些代码；随后还要继续开发并验证真正的
+    <code>ONT FASTQ → minimap2 → samtools → featureCounts → gene_counts_raw.tsv</code>
+    执行流程。
+  </div>
+
+  <h2>1. 当前已完成内容与服务器状态判断</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th>模块</th>
+        <th>本地状态</th>
+        <th>服务器状态</th>
+        <th>说明</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>long-read 数据类型识别</td>
+        <td class="ok">已完成</td>
+        <td class="no">不能认为已完成</td>
+        <td>本地 <code>models.py</code> 已支持 <code>human_longread_rnaseq_v1</code>，但修改尚未提交/推送/部署。</td>
+      </tr>
+      <tr>
+        <td>long-read samplesheet</td>
+        <td class="ok">已完成</td>
+        <td class="no">不能认为已完成</td>
+        <td>本地 prepare 可生成 <code>longread_samplesheet.csv</code>。</td>
+      </tr>
+      <tr>
+        <td>short-read / long-read 分流</td>
+        <td class="ok">已完成骨架</td>
+        <td class="no">不能认为已完成</td>
+        <td>本地 runner 已将 long-read 分流到 <code>rnaseq-mvp-longread</code>。</td>
+      </tr>
+      <tr>
+        <td>long-read 后处理输出 helper</td>
+        <td class="ok">已完成</td>
+        <td class="no">不能认为已完成</td>
+        <td>本地新增 <code>src/rnaseq_mvp/longread.py</code>。</td>
+      </tr>
+      <tr>
+        <td>真实 FASTQ 到 counts 流程</td>
+        <td class="no">尚未完成</td>
+        <td class="no">尚未完成</td>
+        <td>还没有真正调用 <code>minimap2</code>、<code>samtools</code>、<code>featureCounts</code>。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>2. 服务器如何补充已完成的本地代码结构</h2>
+
+  <h3>2.1 推荐路径：本地提交并推送，服务器拉取</h3>
+  <p>因为当前修改还在本地工作区，推荐先在本地完成一次提交，然后推送到 GitHub 私有仓库，再在服务器拉取。</p>
+
+  <h3>本地 Windows 仓库执行</h3>
+  <pre><code>cd E:\1.Phd_work\中医-西医-组学数据模型构建\bulk-rnaseq-governance-mvp
+
+git status --short
+
+python -m ruff check .
+$env:PYTHONPATH='src'; python -m pytest -q
+
+git add src tests definitions schemas docs
+git commit -m "feat: add long-read RNA-seq MVP governance skeleton"
+git push origin main</code></pre>
+
+  <div class="warn">
+    如果你不希望直接推送到 <code>main</code>，可以先创建分支：
+    <code>git checkout -b feat/longread-rnaseq-mvp</code>，再 push 分支并开 PR。
+  </div>
+
+  <h3>服务器执行</h3>
+  <pre><code>cd /root/heng-rna/bulk-rnaseq-governance-mvp
+
+git status --short
+git pull --ff-only origin main
+
+python -m ruff check .
+PYTHONPATH=src python -m pytest -q</code></pre>
+
+  <h3>2.2 服务器验收检查</h3>
+  <p>拉取后，在服务器确认以下文件存在：</p>
+
+  <pre><code>cd /root/heng-rna/bulk-rnaseq-governance-mvp
+
+test -f src/rnaseq_mvp/longread.py
+test -f definitions/methods/longread_rnaseq_minimap2_gene_counts_v1.yaml
+test -f definitions/validation/longread_rnaseq_gene_counts_v1.yaml
+test -f docs/superpowers/specs/2026-10-05-longread-rnaseq-mvp-shared-governance-design.md
+test -f docs/superpowers/plans/2026-10-05-longread-rnaseq-mvp-shared-governance-implementation.md</code></pre>
+
+  <p>如果全部无输出且退出码为 0，说明文件存在。也可以运行：</p>
+
+  <pre><code>git log --oneline -5
+grep -R "longread_gene_counts" -n src definitions tests | head -30</code></pre>
+
+  <h2>3. 如何补充真实 FASTQ→counts 流程</h2>
+
+  <p>真实流程要补的是 <code>rnaseq-mvp-longread</code> 背后的执行器。建议第一版先做 ONT FASTQ 到 gene-level counts。</p>
+
+  <h3>3.1 第一版目标</h3>
+  <pre><code>ONT FASTQ
+→ minimap2 splice-aware alignment
+→ samtools sort/index
+→ featureCounts gene assignment
+→ gene_counts_raw.tsv
+→ alignment_summary.tsv
+→ longread_qc_metrics.tsv
+→ provenance.json
+→ validation_report.json</code></pre>
+
+  <h3>3.2 服务器依赖</h3>
+  <p>建议用 Docker/Apptainer 容器固定工具版本，避免服务器环境漂移。若先用系统包试跑，可安装：</p>
+
+  <pre><code>apt-get update
+apt-get install -y minimap2 samtools subread seqkit</code></pre>
+
+  <table>
+    <thead>
+      <tr>
+        <th>工具</th>
+        <th>用途</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td><code>minimap2</code></td><td>长读长 RNA-seq 到基因组的 splice-aware 比对。</td></tr>
+      <tr><td><code>samtools</code></td><td>BAM 排序、索引、统计。</td></tr>
+      <tr><td><code>featureCounts</code></td><td>按 GENCODE GTF 做 gene-level read assignment。</td></tr>
+      <tr><td><code>seqkit</code></td><td>FASTQ reads 数量、长度、N50 等基础 QC。</td></tr>
+    </tbody>
+  </table>
+
+  <h2>4. 推荐开发方案</h2>
+
+  <h3>阶段 A：新增 long-read CLI 命令入口</h3>
+  <p>在 <code>src/rnaseq_mvp/cli.py</code> 中新增命令，例如：</p>
+
+  <pre><code>rnaseq-mvp longread-run \
+  --samplesheet /root/heng-rna/runtime/runs/LR_TEST/longread_samplesheet.csv \
+  --fasta /root/heng-rna/runtime/reference/human_grch38_gencode_v50_primary/GRCh38.primary_assembly.genome.fa.gz \
+  --gtf /root/heng-rna/runtime/reference/human_grch38_gencode_v50_primary/gencode.v50.primary_assembly.annotation.gtf.gz \
+  --outdir /root/heng-rna/runtime/results/longread/LR_TEST</code></pre>
+
+  <p>也可以保留当前占位命令名 <code>rnaseq-mvp-longread</code>，但更推荐集成到 Typer CLI，方便测试和部署。</p>
+
+  <h3>阶段 B：实现命令构建函数</h3>
+  <p>新增一个确定性函数，例如：</p>
+
+  <pre><code>build_minimap2_command(sample, fastq, fasta, sam_path)
+build_samtools_sort_command(sam_path, bam_path)
+build_featurecounts_command(bam_paths, gtf, counts_path)</code></pre>
+
+  <p>不要一开始就把所有逻辑写成一大段 shell。每个命令单独生成、单独测试。</p>
+
+  <h3>阶段 C：执行流程</h3>
+
+  <pre><code># 1. 比对
+minimap2 -ax splice -uf -k14 reference.fa sample.fastq.gz &gt; sample.sam
+
+# 2. 排序
+samtools sort -@ 8 -o sample.sorted.bam sample.sam
+
+# 3. 索引
+samtools index sample.sorted.bam
+
+# 4. BAM 统计
+samtools flagstat sample.sorted.bam &gt; sample.flagstat.txt
+
+# 5. gene-level counts
+featureCounts \
+  -T 8 \
+  -L \
+  -t exon \
+  -g gene_id \
+  -a annotation.gtf \
+  -o featurecounts.gene_counts.txt \
+  sample.sorted.bam</code></pre>
+
+  <div class="warn">
+    注意：<code>minimap2 -uf -k14</code> 更适合 ONT direct RNA。对于 ONT cDNA，可能使用 <code>-ax splice</code> 即可。第一版需要根据 <code>protocol</code> 分别选择参数。
+  </div>
+
+  <h3>阶段 D：featureCounts 输出规范化</h3>
+  <p><code>featureCounts</code> 默认输出不是最终治理 counts，需要转换为：</p>
+
+  <pre><code>gene_id	gene_name	SAMPLE_001
+ENSG00000000003.18	TSPAN6	12
+ENSG00000000419.16	DPM1	301</code></pre>
+
+  <p>建议新增函数：</p>
+
+  <pre><code>normalize_featurecounts_gene_counts(
+    featurecounts_output,
+    gtf_path,
+    sample_id,
+    output_path
+)</code></pre>
+
+  <p>该函数负责：</p>
+  <ul>
+    <li>读取 featureCounts 结果；</li>
+    <li>提取 <code>Geneid</code> 和 count；</li>
+    <li>从 GTF 建立 <code>gene_id → gene_name</code> 映射；</li>
+    <li>输出标准 <code>gene_counts_raw.tsv</code>。</li>
+  </ul>
+
+  <h3>阶段 E：QC 文件生成</h3>
+  <p>生成两个标准 QC 文件：</p>
+
+  <pre><code>longread/alignment_summary.tsv
+longread/longread_qc_metrics.tsv</code></pre>
+
+  <p>第一版建议包含：</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>metric</th>
+        <th>来源</th>
+        <th>第一版处理</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>total_reads</td><td>seqkit stats</td><td>必需</td></tr>
+      <tr><td>total_bases</td><td>seqkit stats</td><td>必需</td></tr>
+      <tr><td>read_n50</td><td>seqkit stats</td><td>缺失则 WARN</td></tr>
+      <tr><td>alignment_rate</td><td>samtools flagstat</td><td>必需</td></tr>
+      <tr><td>gene_assignment_rate</td><td>featureCounts summary</td><td>必需</td></tr>
+    </tbody>
+  </table>
+
+  <h3>阶段 F：provenance</h3>
+  <p>每次运行必须记录：</p>
+
+  <pre><code>{
+  "method_profile_id": "longread_rnaseq_minimap2_gene_counts_v1",
+  "measure_type": "assigned_longread_gene_counts",
+  "aligner": "minimap2",
+  "quantifier": "featureCounts",
+  "reference_profile_id": "human_grch38_gencode_v50_primary",
+  "samplesheet_sha256": "...",
+  "commands": [...]
+}</code></pre>
+
+  <h2>5. 测试与验收</h2>
+
+  <h3>5.1 单元测试</h3>
+  <pre><code>PYTHONPATH=src python -m pytest tests/unit/test_longread.py -q
+PYTHONPATH=src python -m pytest tests/unit/test_runner.py -q
+PYTHONPATH=src python -m pytest tests/unit/test_validator.py -q</code></pre>
+
+  <h3>5.2 集成测试</h3>
+  <p>构造 tiny FASTQ + tiny FASTA/GTF，用于 smoke test。不要一开始拿完整公共数据测试。</p>
+
+  <pre><code>PYTHONPATH=src python -m pytest tests/integration/test_longread_runner.py -q</code></pre>
+
+  <h3>5.3 服务器 smoke test</h3>
+  <pre><code>cd /root/heng-rna/bulk-rnaseq-governance-mvp
+
+PYTHONPATH=src python -m rnaseq_mvp longread-run \
+  --samplesheet /root/heng-rna/runtime/smoke/longread/longread_samplesheet.csv \
+  --fasta /root/heng-rna/runtime/smoke/longread/reference.fa \
+  --gtf /root/heng-rna/runtime/smoke/longread/annotation.gtf \
+  --outdir /root/heng-rna/runtime/smoke/longread/results</code></pre>
+
+  <p>验收文件：</p>
+  <pre><code>test -f /root/heng-rna/runtime/smoke/longread/results/longread/gene_counts_raw.tsv
+test -f /root/heng-rna/runtime/smoke/longread/results/longread/alignment_summary.tsv
+test -f /root/heng-rna/runtime/smoke/longread/results/longread/longread_qc_metrics.tsv
+test -f /root/heng-rna/runtime/smoke/longread/results/longread/provenance.json</code></pre>
+
+  <h2>6. 推荐实施顺序</h2>
+
+  <ol>
+    <li>先把当前本地代码提交并部署到服务器。</li>
+    <li>服务器确认 long-read 骨架文件存在，测试通过。</li>
+    <li>本地继续开发 <code>rnaseq-mvp longread-run</code> 命令。</li>
+    <li>用 tiny FASTQ/FASTA/GTF 完成单元测试和集成测试。</li>
+    <li>服务器安装或容器化 minimap2/samtools/subread/seqkit。</li>
+    <li>服务器跑 smoke test。</li>
+    <li>再选择一个小型真实 ONT public FASTQ 做真实验证。</li>
+    <li>最后再考虑接入 GEO/SRA 公共目录和用户上传流程。</li>
+  </ol>
+
+  <h2>7. 不建议现在做的事</h2>
+
+  <ul>
+    <li>不要直接用完整公共 long-read 数据集做首次测试。</li>
+    <li>不要把 long-read counts 和 short-read Salmon counts 直接合并做差异分析。</li>
+    <li>不要同时支持 ONT、PacBio、isoform discovery、modification calling。</li>
+    <li>不要让 LLM 判断 QC 是否通过，必须由确定性指标和阈值判断。</li>
+  </ul>
+
+  <div class="note">
+    <strong>下一步 Codex 开发任务建议：</strong>实现 <code>rnaseq-mvp longread-run</code>，先支持 tiny fixture smoke test，再接入服务器真实工具链。
+  </div>
+</main>
+</body>
+</html>

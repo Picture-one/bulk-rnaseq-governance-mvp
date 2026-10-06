@@ -2,18 +2,36 @@
   "additionalProperties": false,
   "properties": {
     "aggregation": {
-      "const": "tximport",
+      "enum": [
+        "tximport",
+        "gene_assignment"
+      ],
       "title": "Aggregation",
       "type": "string"
     },
     "aligner": {
-      "const": "STAR",
+      "enum": [
+        "STAR",
+        "minimap2"
+      ],
       "title": "Aligner",
       "type": "string"
     },
     "counts_measure_type": {
-      "const": "estimated_counts_unscaled",
+      "enum": [
+        "estimated_counts_unscaled",
+        "assigned_longread_gene_counts"
+      ],
       "title": "Counts Measure Type",
+      "type": "string"
+    },
+    "method_family": {
+      "default": "shortread_star_salmon",
+      "enum": [
+        "shortread_star_salmon",
+        "longread_gene_counts"
+      ],
+      "title": "Method Family",
       "type": "string"
     },
     "method_profile_id": {
@@ -21,22 +39,34 @@
       "type": "string"
     },
     "nextflow_version": {
-      "const": "25.10.4",
-      "title": "Nextflow Version",
-      "type": "string"
+      "anyOf": [
+        {
+          "const": "25.10.4",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Nextflow Version"
     },
     "pipeline_name": {
-      "const": "nf-core/rnaseq",
+      "enum": [
+        "nf-core/rnaseq",
+        "custom-longread-gene-counts"
+      ],
       "title": "Pipeline Name",
       "type": "string"
     },
     "pipeline_version": {
-      "const": "3.26.0",
       "title": "Pipeline Version",
       "type": "string"
     },
     "quantifier": {
-      "const": "Salmon",
+      "enum": [
+        "Salmon",
+        "featureCounts"
+      ],
       "title": "Quantifier",
       "type": "string"
     },

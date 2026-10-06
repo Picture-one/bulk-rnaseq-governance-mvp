@@ -46,3 +46,25 @@ def test_t2b_has_two_reverse_stranded_samples() -> None:
         "K562_POLYA_REP2",
     ]
     assert registry.dataset(stage.dataset_id).strandedness == "reverse"
+
+
+def test_expansion_method_profiles_are_registered() -> None:
+    registry = DefinitionRegistry.load(REPO_ROOT / "definitions")
+
+    rrna = registry.method("bulk_rnaseq_star_salmon_rrna_depletion_v1")
+    longread = registry.method("longread_rnaseq_minimap2_gene_counts_v1")
+
+    assert rrna.method_family == "shortread_star_salmon"
+    assert rrna.counts_measure_type == "estimated_counts_unscaled"
+    assert longread.method_family == "longread_gene_counts"
+    assert longread.counts_measure_type == "assigned_longread_gene_counts"
+
+
+def test_expansion_validation_policies_are_registered() -> None:
+    registry = DefinitionRegistry.load(REPO_ROOT / "definitions")
+
+    rrna = registry.validation("bulk_rnaseq_rrna_depletion_v1")
+    longread = registry.validation("longread_rnaseq_gene_counts_v1")
+
+    assert rrna.rrna_warn_percent == 30.0
+    assert longread.mapping_pass_percent == 60.0

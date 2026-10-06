@@ -161,6 +161,22 @@ def _write_samplesheet(path: Path, rows: list[dict[str, str]]) -> None:
     _atomic_write_text(path, buffer.getvalue())
 
 
+def _write_longread_samplesheet(path: Path, rows: list[dict[str, str]]) -> None:
+    buffer = io.StringIO(newline="")
+    columns = [
+        "sample",
+        "input_file",
+        "platform",
+        "protocol",
+        "strandedness",
+        "reference_profile_id",
+    ]
+    writer = csv.DictWriter(buffer, fieldnames=columns, lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(rows)
+    _atomic_write_text(path, buffer.getvalue())
+
+
 def prepare_stage(
     stage_id: str,
     workspace: Path,
@@ -177,7 +193,7 @@ def prepare_stage(
         stage = registry.stage(stage_id)
         dataset = registry.dataset(stage.dataset_id)
         reference = registry.reference(stage.reference_profile_id)
-        registry.method(stage.method_profile_id)
+        method = registry.method(stage.method_profile_id)
         registry.validation(stage.validation_policy_id)
     except KeyError as error:
         raise ValueError(f"unknown scientific definition: {error.args[0]}") from error
@@ -204,9 +220,16 @@ def prepare_stage(
     input_rows: list[InputManifestRow] = []
     sample_paths: dict[str, dict[str, Path]] = {}
     for sample in selected_samples:
-        roles = {file.role for file in sample.files}
-        if roles != {"R1", "R2"}:
-            raise PreparationError(f"paired-end sample is missing R1 or R2: {sample.sample_id}")
+        files_by_role = sample.read_files_by_role()
+        if dataset.read_layout == "paired-end" and set(files_by_role) != {"R1", "R2"}:
+            raise PreparationError(
+                f"paired-end sample is missing R1 or R2: {sample.sample_id}"
+            )
+        if dataset.read_layout in {"single-end", "long-read"} and set(files_by_role) != {"R1"}:
+            raise PreparationError(
+                f"{dataset.read_layout} sample must contain exactly one R1: "
+                f"{sample.sample_id}"
+            )
         sample_paths[sample.sample_id] = {}
         for file in sample.files:
             destination = paths.raw / dataset.experiment_accession / file.filename
@@ -275,21 +298,39 @@ def prepare_stage(
             {
                 "sample": sample.sample_id,
                 "fastq_1": str(sample_paths[sample.sample_id]["R1"]),
-                "fastq_2": str(sample_paths[sample.sample_id]["R2"]),
+                "fastq_2": str(sample_paths[sample.sample_id].get("R2", "")),
                 "strandedness": dataset.strandedness,
-                "seq_platform": "ILLUMINA",
-                "seq_center": "CSHL",
+                "seq_platform": dataset.sequencing_platform.upper(),
+                "seq_center": dataset.sequencing_center,
             }
             for sample in selected_samples
         ],
     )
+    effective_samplesheet = samplesheet
+    if method.method_family == "longread_gene_counts":
+        longread_samplesheet = run_directory / "longread_samplesheet.csv"
+        _write_longread_samplesheet(
+            longread_samplesheet,
+            [
+                {
+                    "sample": sample.sample_id,
+                    "input_file": str(sample_paths[sample.sample_id]["R1"]),
+                    "platform": dataset.sequencing_platform,
+                    "protocol": dataset.library_selection,
+                    "strandedness": dataset.strandedness,
+                    "reference_profile_id": reference.reference_profile_id,
+                }
+                for sample in selected_samples
+            ],
+        )
+        effective_samplesheet = longread_samplesheet
 
     repo_root = Path(__file__).resolve().parents[2]
     template_path = repo_root / "configs" / "params" / f"{stage_id.lower()}.yaml"
     scientific_parameters = yaml.safe_load(template_path.read_text(encoding="utf-8"))
     effective_parameters = {
         **scientific_parameters,
-        "input": str(samplesheet.resolve()),
+        "input": str(effective_samplesheet.resolve()),
         "outdir": str((paths.results / stage_id / run_id).resolve()),
         "fasta": str(reference_paths["genome_fasta"]),
         "gtf": str(reference_paths["annotation_gtf"]),

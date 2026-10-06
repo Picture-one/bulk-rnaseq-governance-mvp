@@ -89,7 +89,11 @@
   "additionalProperties": false,
   "properties": {
     "assay": {
-      "const": "polyA plus RNA-seq",
+      "enum": [
+        "polyA plus RNA-seq",
+        "RNA-seq",
+        "long-read RNA-seq"
+      ],
       "title": "Assay",
       "type": "string"
     },
@@ -106,7 +110,12 @@
       "type": "string"
     },
     "library_selection": {
-      "const": "Poly(A)+",
+      "enum": [
+        "Poly(A)+",
+        "rRNA depletion",
+        "direct RNA",
+        "cDNA"
+      ],
       "title": "Library Selection",
       "type": "string"
     },
@@ -115,8 +124,22 @@
       "title": "Organism",
       "type": "string"
     },
+    "profile_id": {
+      "default": "human_illumina_polya_bulk_v1",
+      "enum": [
+        "human_illumina_polya_bulk_v1",
+        "human_illumina_rrna_depletion_bulk_v1",
+        "human_longread_rnaseq_v1"
+      ],
+      "title": "Profile Id",
+      "type": "string"
+    },
     "read_layout": {
-      "const": "paired-end",
+      "enum": [
+        "paired-end",
+        "single-end",
+        "long-read"
+      ],
       "title": "Read Layout",
       "type": "string"
     },
@@ -137,17 +160,34 @@
       "title": "Schema Version",
       "type": "string"
     },
+    "sequencing_center": {
+      "default": "UNKNOWN",
+      "title": "Sequencing Center",
+      "type": "string"
+    },
     "sequencing_platform": {
       "title": "Sequencing Platform",
       "type": "string"
     },
     "source_database": {
-      "const": "ENCODE",
+      "enum": [
+        "ENCODE",
+        "GEO",
+        "SRA",
+        "ENA",
+        "USER_UPLOAD"
+      ],
       "title": "Source Database",
       "type": "string"
     },
     "strandedness": {
-      "const": "reverse",
+      "enum": [
+        "reverse",
+        "forward",
+        "unstranded",
+        "auto",
+        "unknown"
+      ],
       "title": "Strandedness",
       "type": "string"
     }

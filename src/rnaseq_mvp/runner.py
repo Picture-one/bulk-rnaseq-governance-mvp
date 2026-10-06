@@ -16,6 +16,7 @@ from rnaseq_mvp.constants import MVP_VERSION
 from rnaseq_mvp.definitions import DefinitionRegistry
 from rnaseq_mvp.logging_utils import RunLogger
 from rnaseq_mvp.manifests import atomic_write_json
+from rnaseq_mvp.models import MethodDefinition
 from rnaseq_mvp.paths import WorkspacePaths
 from rnaseq_mvp.prepare import PreparationResult
 from rnaseq_mvp.state import RunStatus, StateStore
@@ -79,6 +80,10 @@ class RunResult(BaseModel):
     stderr_path: Path
 
 
+def _command_path(path: Path) -> str:
+    return path.as_posix()
+
+
 def build_nextflow_command(
     stage_id: str,
     run_id: str,
@@ -102,15 +107,61 @@ def build_nextflow_command(
         "-profile",
         "docker",
         "-params-file",
-        str(workspace / "runs" / run_id / "parameters.yaml"),
+        _command_path(workspace / "runs" / run_id / "parameters.yaml"),
         "-c",
-        str(repo_root / "configs" / "profiles" / f"{profile}.config"),
+        _command_path(repo_root / "configs" / "profiles" / f"{profile}.config"),
         "-work-dir",
-        str(workspace / "work"),
+        _command_path(workspace / "work"),
     ]
     if resume:
         command.append("-resume")
     return command
+
+
+def build_longread_command(
+    run_id: str,
+    repo_root: Path,
+    workspace: Path,
+) -> list[str]:
+    return [
+        "rnaseq-mvp-longread",
+        "run",
+        "--samplesheet",
+        _command_path(workspace / "runs" / run_id / "longread_samplesheet.csv"),
+        "--outdir",
+        _command_path(workspace / "results" / "longread" / run_id),
+        "--fasta",
+        _command_path(workspace / "runs" / run_id / "reference_manifest.tsv"),
+        "--config",
+        _command_path(repo_root / "configs" / "longread" / "minimap2_gene_counts_v1.yaml"),
+    ]
+
+
+def build_pipeline_command(
+    stage_id: str,
+    run_id: str,
+    profile: str,
+    repo_root: Path,
+    workspace: Path,
+    resume: bool,
+    method: MethodDefinition,
+) -> list[str]:
+    if method.method_family == "shortread_star_salmon":
+        return build_nextflow_command(
+            stage_id=stage_id,
+            run_id=run_id,
+            profile=profile,
+            repo_root=repo_root,
+            workspace=workspace,
+            resume=resume,
+        )
+    if method.method_family == "longread_gene_counts":
+        return build_longread_command(
+            run_id=run_id,
+            repo_root=repo_root,
+            workspace=workspace,
+        )
+    raise ValueError(f"unsupported method_family: {method.method_family}")
 
 
 def _require_preflight(
@@ -240,8 +291,14 @@ def run_stage(
     run_directory = paths.runs / run_id
     preparation = _verify_preparation(run_directory)
     repo_root = Path(__file__).resolve().parents[2]
-    command = build_nextflow_command(
-        stage_id, run_id, profile, repo_root, paths.root, resume
+    command = build_pipeline_command(
+        stage_id=stage_id,
+        run_id=run_id,
+        profile=profile,
+        repo_root=repo_root,
+        workspace=paths.root,
+        resume=resume,
+        method=method,
     )
     parameters = yaml.safe_load(
         Path(preparation.parameters_path).read_text(encoding="utf-8")
@@ -252,7 +309,8 @@ def run_stage(
     provenance_path = run_directory / "run_provenance.json"
     logger = RunLogger(run_directory, run_id)
     environment = os.environ.copy()
-    environment["NXF_VER"] = method.nextflow_version
+    if method.nextflow_version is not None:
+        environment["NXF_VER"] = method.nextflow_version
     completed: subprocess.CompletedProcess[str] | None = None
     error_message: str | None = None
 

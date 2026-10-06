@@ -25,8 +25,11 @@ class StrictDefinitionModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+ReadRole = Literal["R1", "R2"]
+
+
 class FileDefinition(StrictDefinitionModel):
-    role: Literal["R1", "R2"]
+    role: ReadRole
     file_accession: str
     filename: str
     url: HttpUrl
@@ -46,12 +49,19 @@ class SampleDefinition(StrictDefinitionModel):
     library_accession: str
     files: list[FileDefinition]
 
+    def read_files_by_role(self) -> dict[ReadRole, FileDefinition]:
+        return {file.role: file for file in self.files}
+
     @model_validator(mode="after")
-    def validate_read_pair(self) -> SampleDefinition:
+    def validate_read_files(self) -> SampleDefinition:
         roles = [file.role for file in self.files]
 
-        if len(roles) != 2 or roles.count("R1") != 1 or roles.count("R2") != 1:
-            raise ValueError("sample must contain exactly one R1 and one R2")
+        if roles.count("R1") != 1:
+            raise ValueError("sample must contain exactly one R1")
+        if roles.count("R2") > 1:
+            raise ValueError("sample must not contain more than one R2")
+        if len(roles) not in (1, 2):
+            raise ValueError("sample must contain one R1 and optional one R2")
 
         return self
 
@@ -59,16 +69,22 @@ class SampleDefinition(StrictDefinitionModel):
 class DatasetDefinition(StrictDefinitionModel):
     schema_version: Literal["1.0"]
     dataset_id: str
-    source_database: Literal["ENCODE"]
+    profile_id: Literal[
+        "human_illumina_polya_bulk_v1",
+        "human_illumina_rrna_depletion_bulk_v1",
+        "human_longread_rnaseq_v1",
+    ] = "human_illumina_polya_bulk_v1"
+    source_database: Literal["ENCODE", "GEO", "SRA", "ENA", "USER_UPLOAD"]
     experiment_accession: str
     organism: Literal["Homo sapiens"]
     biosample: str
-    assay: Literal["polyA plus RNA-seq"]
-    library_selection: Literal["Poly(A)+"]
-    read_layout: Literal["paired-end"]
+    assay: Literal["polyA plus RNA-seq", "RNA-seq", "long-read RNA-seq"]
+    library_selection: Literal["Poly(A)+", "rRNA depletion", "direct RNA", "cDNA"]
+    read_layout: Literal["paired-end", "single-end", "long-read"]
     read_length: PositiveInt
-    strandedness: Literal["reverse"]
+    strandedness: Literal["reverse", "forward", "unstranded", "auto", "unknown"]
     sequencing_platform: str
+    sequencing_center: str = "UNKNOWN"
     samples: list[SampleDefinition]
 
     @model_validator(mode="after")
@@ -86,6 +102,21 @@ class DatasetDefinition(StrictDefinitionModel):
 
         if len(file_accessions) != len(set(file_accessions)):
             raise ValueError("dataset file_accessions must be unique")
+
+        for sample in self.samples:
+            roles = sample.read_files_by_role()
+            if self.read_layout == "paired-end" and set(roles) != {"R1", "R2"}:
+                raise ValueError("paired-end samples must contain exactly one R1 and one R2")
+            if self.read_layout in {"single-end", "long-read"} and set(roles) != {"R1"}:
+                raise ValueError(f"{self.read_layout} samples must contain exactly one R1")
+
+        if self.profile_id == "human_longread_rnaseq_v1":
+            if self.read_layout != "long-read":
+                raise ValueError("long-read v1 requires read_layout=long-read")
+            if self.sequencing_platform != "ONT":
+                raise ValueError("long-read v1 supports ONT only")
+            if self.library_selection not in {"cDNA", "direct RNA"}:
+                raise ValueError("long-read v1 requires cDNA or direct RNA")
 
         return self
 
@@ -139,13 +170,49 @@ class StageDefinition(StrictDefinitionModel):
 class MethodDefinition(StrictDefinitionModel):
     schema_version: Literal["1.0"]
     method_profile_id: str
-    nextflow_version: Literal["25.10.4"]
-    pipeline_name: Literal["nf-core/rnaseq"]
-    pipeline_version: Literal["3.26.0"]
-    aligner: Literal["STAR"]
-    quantifier: Literal["Salmon"]
-    aggregation: Literal["tximport"]
-    counts_measure_type: Literal["estimated_counts_unscaled"]
+    method_family: Literal["shortread_star_salmon", "longread_gene_counts"] = (
+        "shortread_star_salmon"
+    )
+    nextflow_version: Literal["25.10.4"] | None
+    pipeline_name: Literal["nf-core/rnaseq", "custom-longread-gene-counts"]
+    pipeline_version: str
+    aligner: Literal["STAR", "minimap2"]
+    quantifier: Literal["Salmon", "featureCounts"]
+    aggregation: Literal["tximport", "gene_assignment"]
+    counts_measure_type: Literal[
+        "estimated_counts_unscaled",
+        "assigned_longread_gene_counts",
+    ]
+
+    @model_validator(mode="after")
+    def validate_method_family_contract(self) -> MethodDefinition:
+        if self.method_family == "shortread_star_salmon":
+            expected = {
+                "nextflow_version": "25.10.4",
+                "pipeline_name": "nf-core/rnaseq",
+                "pipeline_version": "3.26.0",
+                "aligner": "STAR",
+                "quantifier": "Salmon",
+                "aggregation": "tximport",
+                "counts_measure_type": "estimated_counts_unscaled",
+            }
+            for field, value in expected.items():
+                if getattr(self, field) != value:
+                    raise ValueError(
+                        f"shortread_star_salmon requires {field}={value}"
+                    )
+        elif self.method_family == "longread_gene_counts":
+            expected = {
+                "pipeline_name": "custom-longread-gene-counts",
+                "aligner": "minimap2",
+                "quantifier": "featureCounts",
+                "aggregation": "gene_assignment",
+                "counts_measure_type": "assigned_longread_gene_counts",
+            }
+            for field, value in expected.items():
+                if getattr(self, field) != value:
+                    raise ValueError(f"longread_gene_counts requires {field}={value}")
+        return self
 
 
 class ValidationPolicy(StrictDefinitionModel):

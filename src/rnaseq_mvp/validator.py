@@ -16,6 +16,7 @@ from rnaseq_mvp.checksums import hash_file
 from rnaseq_mvp.definitions import DefinitionRegistry
 from rnaseq_mvp.logging_utils import RunLogger
 from rnaseq_mvp.manifests import atomic_write_json, write_tsv
+from rnaseq_mvp.models import MethodDefinition
 from rnaseq_mvp.paths import WorkspacePaths
 from rnaseq_mvp.state import RunStatus, StateStore
 
@@ -172,6 +173,35 @@ def _multiqc_path(results_dir: Path) -> Path:
     return matches[0]
 
 
+def required_artifacts_for_method(
+    results_dir: Path,
+    method: MethodDefinition,
+) -> dict[str, Path]:
+    if method.method_family == "shortread_star_salmon":
+        return {
+            "counts": results_dir / "star_salmon" / "salmon.merged.gene_counts.tsv",
+            "tpm": results_dir / "star_salmon" / "salmon.merged.gene_tpm.tsv",
+            "lengths": results_dir / "star_salmon" / "salmon.merged.gene_lengths.tsv",
+            "multiqc_report": results_dir
+            / "multiqc"
+            / "star_salmon"
+            / "multiqc_report.html",
+            "multiqc_data": results_dir
+            / "multiqc"
+            / "star_salmon"
+            / "multiqc_data"
+            / "multiqc_data.json",
+        }
+    if method.method_family == "longread_gene_counts":
+        return {
+            "counts": results_dir / "longread" / "gene_counts_raw.tsv",
+            "alignment_summary": results_dir / "longread" / "alignment_summary.tsv",
+            "longread_qc_metrics": results_dir / "longread" / "longread_qc_metrics.tsv",
+            "provenance": results_dir / "longread" / "provenance.json",
+        }
+    raise ValidationError(f"unsupported method_family: {method.method_family}")
+
+
 def _general_stats(payload: dict) -> dict[str, dict]:
     merged: dict[str, dict] = {}
     blocks = payload.get("report_general_stats_data", [])
@@ -301,26 +331,14 @@ def validate_stage(
         raise ValidationError("validation requires the matching EXECUTED run")
     stage = registry.stage(stage_id)
     dataset = registry.dataset(stage.dataset_id)
+    method = registry.method(stage.method_profile_id)
     policy = registry.validation(stage.validation_policy_id)
     parameters = yaml.safe_load(
         (run_directory / "parameters.yaml").read_text(encoding="utf-8")
     )
     results_dir = Path(parameters["outdir"])
-    counts_path = results_dir / "star_salmon" / "salmon.merged.gene_counts.tsv"
-    required = {
-        "counts": counts_path,
-        "tpm": results_dir / "star_salmon" / "salmon.merged.gene_tpm.tsv",
-        "lengths": results_dir / "star_salmon" / "salmon.merged.gene_lengths.tsv",
-        "multiqc_report": results_dir
-        / "multiqc"
-        / "star_salmon"
-        / "multiqc_report.html",
-        "multiqc_data": results_dir
-        / "multiqc"
-        / "star_salmon"
-        / "multiqc_data"
-        / "multiqc_data.json",
-    }
+    required = required_artifacts_for_method(results_dir, method)
+    counts_path = required["counts"]
     missing = [name for name, path in required.items() if not path.is_file()]
     if missing:
         raise ValidationError(f"required result artifacts missing: {','.join(missing)}")
@@ -329,16 +347,19 @@ def validate_stage(
         sample_id for sample_id in stage.sample_ids if sample_id in dataset.sample_ids
     ] if hasattr(dataset, "sample_ids") else stage.sample_ids
     counts = validate_counts(counts_path, expected_samples, gtf_path)
-    multiqc_root = required["multiqc_report"].parent
-    qc_metrics = extract_qc_metrics(
-        multiqc_root,
-        expected_samples,
-        aliases=policy.qc_metric_aliases,
-        mapping_pass_percent=policy.mapping_pass_percent,
-        mapping_fail_below_percent=policy.mapping_fail_below_percent,
-        rrna_warn_percent=policy.rrna_warn_percent,
-        mitochondrial_warn_percent=policy.mitochondrial_warn_percent,
-    )
+    if method.method_family == "shortread_star_salmon":
+        multiqc_root = required["multiqc_report"].parent
+        qc_metrics = extract_qc_metrics(
+            multiqc_root,
+            expected_samples,
+            aliases=policy.qc_metric_aliases,
+            mapping_pass_percent=policy.mapping_pass_percent,
+            mapping_fail_below_percent=policy.mapping_fail_below_percent,
+            rrna_warn_percent=policy.rrna_warn_percent,
+            mitochondrial_warn_percent=policy.mitochondrial_warn_percent,
+        )
+    else:
+        qc_metrics = []
     reference_traceability = (
         "PASS"
         if _reference_is_traced(run_directory / "reference_manifest.tsv", gtf_path)

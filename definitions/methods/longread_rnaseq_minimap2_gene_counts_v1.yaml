@@ -1,0 +1,10 @@
+schema_version: "1.0"
+method_profile_id: "longread_rnaseq_minimap2_gene_counts_v1"
+method_family: "longread_gene_counts"
+nextflow_version:
+pipeline_name: "custom-longread-gene-counts"
+pipeline_version: "0.1.0"
+aligner: "minimap2"
+quantifier: "featureCounts"
+aggregation: "gene_assignment"
+counts_measure_type: "assigned_longread_gene_counts"
