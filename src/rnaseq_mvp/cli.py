@@ -9,6 +9,7 @@ import typer
 from rnaseq_mvp.constants import MVP_VERSION, ExitCode
 from rnaseq_mvp.definitions import DefinitionRegistry
 from rnaseq_mvp.downloader import DownloadError
+from rnaseq_mvp.longread import run_longread_workflow
 from rnaseq_mvp.orchestrator import (
     RealExecutionServices,
     execute_stage,
@@ -452,3 +453,45 @@ def smoke_test(
     if result.status == "FAIL":
         typer.echo(f"Missing outputs: {','.join(result.missing_outputs)}", err=True)
         raise typer.Exit(code=int(ExitCode.RUN))
+
+
+@app.command(name="longread-run")
+def longread_run(
+    samplesheet: Annotated[
+        Path,
+        typer.Option("--samplesheet", help="Long-read samplesheet CSV."),
+    ],
+    fasta: Annotated[
+        Path,
+        typer.Option("--fasta", help="Reference FASTA path."),
+    ],
+    gtf: Annotated[
+        Path,
+        typer.Option("--gtf", help="Reference GTF path."),
+    ],
+    outdir: Annotated[
+        Path,
+        typer.Option("--outdir", help="Output directory."),
+    ],
+    threads: Annotated[
+        int,
+        typer.Option("--threads", help="Number of tool threads."),
+    ] = 4,
+) -> None:
+    """Run the deterministic ONT long-read FASTQ-to-gene-counts smoke workflow."""
+    try:
+        result = run_longread_workflow(
+            samplesheet=samplesheet,
+            fasta=fasta,
+            gtf=gtf,
+            outdir=outdir,
+            threads=threads,
+        )
+    except (ValueError, OSError) as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=int(ExitCode.RUN)) from error
+    typer.echo("Long-read run status: PASS")
+    typer.echo(f"Counts: {result.counts_path}")
+    typer.echo(f"Alignment summary: {result.alignment_summary_path}")
+    typer.echo(f"QC metrics: {result.qc_metrics_path}")
+    typer.echo(f"Provenance: {result.provenance_path}")

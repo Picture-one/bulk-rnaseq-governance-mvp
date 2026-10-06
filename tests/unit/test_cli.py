@@ -27,6 +27,7 @@ def test_help_lists_governance_commands() -> None:
         "status",
         "execute",
         "smoke-test",
+        "longread-run",
     ):
         assert command in result.stdout
 

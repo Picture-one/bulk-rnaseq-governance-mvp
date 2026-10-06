@@ -87,6 +87,98 @@
     执行流程。
   </div>
 
+  <h2>0. 先用通俗语言理解这件事</h2>
+
+  <p>你现在做的平台可以分成两层：</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>层次</th>
+        <th>通俗理解</th>
+        <th>在本项目里对应什么</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>治理层</td>
+        <td>像医院检验科的信息系统：登记样本、记录是谁的数据、文件在哪里、用了哪个参考标准、结果是否合格。</td>
+        <td>dataset 定义、samplesheet、manifest、checksum、状态管理、validation report、provenance。</td>
+      </tr>
+      <tr>
+        <td>分析层</td>
+        <td>像真正做检测的仪器和实验流程：把原始 FASTQ 数据加工成 counts。</td>
+        <td>minimap2 比对、samtools 处理 BAM、featureCounts 计数、QC 统计。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>目前已经完成的是第一层的一部分：系统已经知道“long-read 是一类独立数据，不能走 Illumina short-read 的 STAR/Salmon 路线”。但第二层——真正把 long-read FASTQ 跑成 counts 的工具链——还没接上。</p>
+
+  <div class="note">
+    <strong>为什么要分两层？</strong><br>
+    因为平台未来会同时管理 short-read、rRNA depletion、long-read、公共数据库数据和用户上传数据。如果不先把“治理层”设计清楚，后面不同数据类型的结果会混乱：不知道哪个 counts 是用什么方法产生的，也不知道能不能放在一起分析。
+  </div>
+
+  <h3>0.1 几个核心概念先解释清楚</h3>
+
+  <table>
+    <thead>
+      <tr>
+        <th>概念</th>
+        <th>是什么意思</th>
+        <th>为什么重要</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>FASTQ</td>
+        <td>测序仪或公共数据库给出的原始序列文件，里面包含 reads 序列和每个碱基的质量值。</td>
+        <td>它是从原始测序数据开始统一处理的入口。要想统一分析公共数据，最好从 FASTQ 开始。</td>
+      </tr>
+      <tr>
+        <td>counts</td>
+        <td>每个基因在每个样本里被多少 reads 支持的计数表。</td>
+        <td>它是后续差异表达、聚类、通路分析等研究最常用的基础表达矩阵。</td>
+      </tr>
+      <tr>
+        <td>比对 alignment</td>
+        <td>把 FASTQ 里的 reads 放回参考基因组上，看每条 read 来自哪个基因组位置。</td>
+        <td>不知道 read 来自哪里，就无法判断它应该计入哪个基因。</td>
+      </tr>
+      <tr>
+        <td>minimap2</td>
+        <td>常用的长读长比对工具，适合 Nanopore/PacBio 这类 long-read 数据。</td>
+        <td>STAR 更适合 Illumina short-read；long-read 需要适合长 reads 的比对工具。</td>
+      </tr>
+      <tr>
+        <td>BAM</td>
+        <td>比对结果文件，记录每条 read 比到了哪里。</td>
+        <td>featureCounts 等计数工具通常从 BAM 中判断 reads 属于哪个基因。</td>
+      </tr>
+      <tr>
+        <td>samtools</td>
+        <td>处理 BAM 文件的常用工具，可以排序、索引、统计比对情况。</td>
+        <td>很多下游工具要求 BAM 已排序和索引；同时它能生成 alignment QC。</td>
+      </tr>
+      <tr>
+        <td>featureCounts</td>
+        <td>根据 GTF 注释文件，把比对到基因区域的 reads 计入相应基因。</td>
+        <td>它负责把“每条 read 在哪里”转换成“每个基因有多少 reads”。</td>
+      </tr>
+      <tr>
+        <td>GTF</td>
+        <td>基因注释文件，告诉工具哪些基因在基因组的什么位置。</td>
+        <td>没有 GTF，就无法把 reads 归属到标准基因 ID。</td>
+      </tr>
+      <tr>
+        <td>provenance</td>
+        <td>结果来源记录：用了什么输入、什么参考、什么软件、什么参数、什么版本。</td>
+        <td>科研结果需要可追溯，否则别人无法复现，也无法判断不同数据能否整合。</td>
+      </tr>
+    </tbody>
+  </table>
+
   <h2>1. 当前已完成内容与服务器状态判断</h2>
 
   <table>
@@ -134,8 +226,19 @@
 
   <h2>2. 服务器如何补充已完成的本地代码结构</h2>
 
+  <p><strong>这一阶段的目的：</strong>把本地已经写好的 long-read 治理框架代码同步到服务器。</p>
+
+  <p><strong>为什么要做：</strong>真正运行分析是在服务器上完成的。如果服务器代码还是旧版本，它根本不知道什么是 <code>human_longread_rnaseq_v1</code>，也不会生成 long-read samplesheet，更不会分流到 long-read 执行器。</p>
+
+  <p><strong>如果不做会怎样：</strong>你在服务器上运行时，最多只能使用之前的 short-read MVP；long-read 相关命令、定义和文件都不存在。</p>
+
   <h3>2.1 推荐路径：本地提交并推送，服务器拉取</h3>
   <p>因为当前修改还在本地工作区，推荐先在本地完成一次提交，然后推送到 GitHub 私有仓库，再在服务器拉取。</p>
+
+  <div class="note">
+    <strong>为什么要走 git，而不是手动复制文件？</strong><br>
+    因为 git 会完整记录修改历史，服务器可以明确知道当前运行的是哪个版本。以后出了问题，可以通过 commit ID 回溯。手动复制容易漏文件，也不利于复现。
+  </div>
 
   <h3>本地 Windows 仓库执行</h3>
   <pre><code>cd E:\1.Phd_work\中医-西医-组学数据模型构建\bulk-rnaseq-governance-mvp
@@ -166,6 +269,8 @@ PYTHONPATH=src python -m pytest -q</code></pre>
   <h3>2.2 服务器验收检查</h3>
   <p>拉取后，在服务器确认以下文件存在：</p>
 
+  <p><strong>为什么要验收文件是否存在：</strong>这些文件分别代表 long-read MVP 的关键部件：模型定义、方法定义、验证策略、设计文档和实现计划。缺任何一个，都说明服务器没有完整同步。</p>
+
   <pre><code>cd /root/heng-rna/bulk-rnaseq-governance-mvp
 
 test -f src/rnaseq_mvp/longread.py
@@ -183,6 +288,8 @@ grep -R "longread_gene_counts" -n src definitions tests | head -30</code></pre>
 
   <p>真实流程要补的是 <code>rnaseq-mvp-longread</code> 背后的执行器。建议第一版先做 ONT FASTQ 到 gene-level counts。</p>
 
+  <p><strong>为什么不是继续改原来的 short-read 流程：</strong>原来的流程是 <code>STAR + Salmon + tximport</code>，主要为 Illumina short-read RNA-seq 设计。Nanopore long-read 的 read 更长、错误模式不同、数据结构不同，所以应该用 long-read 适配工具链。</p>
+
   <h3>3.1 第一版目标</h3>
   <pre><code>ONT FASTQ
 → minimap2 splice-aware alignment
@@ -196,6 +303,8 @@ grep -R "longread_gene_counts" -n src definitions tests | head -30</code></pre>
 
   <h3>3.2 服务器依赖</h3>
   <p>建议用 Docker/Apptainer 容器固定工具版本，避免服务器环境漂移。若先用系统包试跑，可安装：</p>
+
+  <p><strong>为什么要固定工具版本：</strong>同一个 FASTQ，用不同版本的软件或不同参数，可能得到不完全一样的 counts。为了科研复现，必须记录并尽量固定版本。</p>
 
   <pre><code>apt-get update
 apt-get install -y minimap2 samtools subread seqkit</code></pre>
@@ -220,6 +329,12 @@ apt-get install -y minimap2 samtools subread seqkit</code></pre>
   <h3>阶段 A：新增 long-read CLI 命令入口</h3>
   <p>在 <code>src/rnaseq_mvp/cli.py</code> 中新增命令，例如：</p>
 
+  <p><strong>这一步做什么：</strong>给用户或服务器一个明确的入口命令，告诉工具“我要运行 long-read 分析”。</p>
+
+  <p><strong>为什么需要：</strong>现在已有的 <code>prepare/run/validate</code> 更多是围绕 short-read nf-core/rnaseq 设计的。long-read 需要独立入口，避免被错误送进 short-read 流程。</p>
+
+  <p><strong>完成后应该看到什么：</strong>运行 <code>rnaseq-mvp --help</code> 时，应该能看到类似 <code>longread-run</code> 的命令。</p>
+
   <pre><code>rnaseq-mvp longread-run \
   --samplesheet /root/heng-rna/runtime/runs/LR_TEST/longread_samplesheet.csv \
   --fasta /root/heng-rna/runtime/reference/human_grch38_gencode_v50_primary/GRCh38.primary_assembly.genome.fa.gz \
@@ -231,6 +346,12 @@ apt-get install -y minimap2 samtools subread seqkit</code></pre>
   <h3>阶段 B：实现命令构建函数</h3>
   <p>新增一个确定性函数，例如：</p>
 
+  <p><strong>这一步做什么：</strong>把每一步外部软件命令变成 Python 函数生成的标准命令。</p>
+
+  <p><strong>为什么需要：</strong>不要让用户手工拼命令。工具应该根据 samplesheet、参考基因组和输出目录自动生成命令，这样才能自动化、可复现、可测试。</p>
+
+  <p><strong>如果不这样做：</strong>每个人手工写参数，结果可能不一致；出错后也很难判断问题出在哪里。</p>
+
   <pre><code>build_minimap2_command(sample, fastq, fasta, sam_path)
 build_samtools_sort_command(sam_path, bam_path)
 build_featurecounts_command(bam_paths, gtf, counts_path)</code></pre>
@@ -238,6 +359,14 @@ build_featurecounts_command(bam_paths, gtf, counts_path)</code></pre>
   <p>不要一开始就把所有逻辑写成一大段 shell。每个命令单独生成、单独测试。</p>
 
   <h3>阶段 C：执行流程</h3>
+
+  <p><strong>这一步做什么：</strong>真正把 FASTQ 变成 BAM，再把 BAM 变成 counts。</p>
+
+  <p><strong>为什么要先 minimap2：</strong>FASTQ 只是 reads 序列，还不知道这些 reads 来自哪个基因。minimap2 的作用是把 reads 放回参考基因组。</p>
+
+  <p><strong>为什么要 samtools sort/index：</strong>比对后的 BAM 需要整理成标准顺序，并建立索引，很多下游工具和 QC 工具才可以高效读取。</p>
+
+  <p><strong>为什么要 featureCounts：</strong>比对只回答“read 在基因组哪里”，featureCounts 才回答“这条 read 应该算到哪个基因”。</p>
 
   <pre><code># 1. 比对
 minimap2 -ax splice -uf -k14 reference.fa sample.fastq.gz &gt; sample.sam
@@ -268,6 +397,12 @@ featureCounts \
   <h3>阶段 D：featureCounts 输出规范化</h3>
   <p><code>featureCounts</code> 默认输出不是最终治理 counts，需要转换为：</p>
 
+  <p><strong>这一步做什么：</strong>把 featureCounts 原始结果整理成平台统一格式。</p>
+
+  <p><strong>为什么需要：</strong>不同软件输出格式不一样。你的平台需要一个稳定的标准表格，后续中医、西医、组学 CDM 才能统一读取。</p>
+
+  <p><strong>完成后应该看到什么：</strong>一个标准的 <code>gene_counts_raw.tsv</code> 文件，第一列是 <code>gene_id</code>，第二列是 <code>gene_name</code>，后面每列是样本 counts。</p>
+
   <pre><code>gene_id	gene_name	SAMPLE_001
 ENSG00000000003.18	TSPAN6	12
 ENSG00000000419.16	DPM1	301</code></pre>
@@ -291,6 +426,12 @@ ENSG00000000419.16	DPM1	301</code></pre>
 
   <h3>阶段 E：QC 文件生成</h3>
   <p>生成两个标准 QC 文件：</p>
+
+  <p><strong>这一步做什么：</strong>生成质量控制结果，判断这次分析是否基本可信。</p>
+
+  <p><strong>为什么需要 QC：</strong>即使成功生成 counts，也不代表数据质量可靠。例如 reads 太少、比对率太低、基因归属率太低，都会影响后续结论。</p>
+
+  <p><strong>为什么第一版以 WARN 为主：</strong>long-read RNA-seq 受平台、试剂、basecaller、样本类型影响很大，目前不适合一开始设置过于武断的硬阈值。</p>
 
   <pre><code>longread/alignment_summary.tsv
 longread/longread_qc_metrics.tsv</code></pre>
@@ -317,6 +458,10 @@ longread/longread_qc_metrics.tsv</code></pre>
   <h3>阶段 F：provenance</h3>
   <p>每次运行必须记录：</p>
 
+  <p><strong>这一步做什么：</strong>记录结果是怎么产生的。</p>
+
+  <p><strong>为什么需要：</strong>科研分析必须可追溯。以后你整合多个公共数据库时，需要知道每个 counts 来自哪个 FASTQ、哪个参考基因组、哪个软件版本和哪些参数。</p>
+
   <pre><code>{
   "method_profile_id": "longread_rnaseq_minimap2_gene_counts_v1",
   "measure_type": "assigned_longread_gene_counts",
@@ -329,6 +474,10 @@ longread/longread_qc_metrics.tsv</code></pre>
 
   <h2>5. 测试与验收</h2>
 
+  <p><strong>为什么要先用 tiny 数据测试：</strong>完整 long-read 数据通常很大，第一次就跑真实数据会很慢，而且出错后很难定位。tiny FASTQ/FASTA/GTF 可以快速验证流程逻辑是否正确。</p>
+
+  <p><strong>测试不是形式主义：</strong>这里的测试是为了回答三个问题：命令能不能生成？文件能不能产出？产出的 counts 格式是否符合治理标准？</p>
+
   <h3>5.1 单元测试</h3>
   <pre><code>PYTHONPATH=src python -m pytest tests/unit/test_longread.py -q
 PYTHONPATH=src python -m pytest tests/unit/test_runner.py -q
@@ -340,6 +489,10 @@ PYTHONPATH=src python -m pytest tests/unit/test_validator.py -q</code></pre>
   <pre><code>PYTHONPATH=src python -m pytest tests/integration/test_longread_runner.py -q</code></pre>
 
   <h3>5.3 服务器 smoke test</h3>
+
+  <p><strong>smoke test 是什么意思：</strong>不是正式科研分析，而是“冒烟测试”：确认整个流程能从头跑到尾，不会一启动就崩。</p>
+
+  <p><strong>为什么服务器也要 smoke test：</strong>本地测试通过不代表服务器通过。服务器的软件、路径、权限、CPU 架构、容器环境都可能不同。</p>
   <pre><code>cd /root/heng-rna/bulk-rnaseq-governance-mvp
 
 PYTHONPATH=src python -m rnaseq_mvp longread-run \
@@ -356,6 +509,8 @@ test -f /root/heng-rna/runtime/smoke/longread/results/longread/provenance.json</
 
   <h2>6. 推荐实施顺序</h2>
 
+  <p>下面这个顺序的核心原则是：先让代码同步，再让小数据跑通，最后再上真实数据。不要跳步。</p>
+
   <ol>
     <li>先把当前本地代码提交并部署到服务器。</li>
     <li>服务器确认 long-read 骨架文件存在，测试通过。</li>
@@ -368,6 +523,8 @@ test -f /root/heng-rna/runtime/smoke/longread/results/longread/provenance.json</
   </ol>
 
   <h2>7. 不建议现在做的事</h2>
+
+  <p>这些不是永远不能做，而是不适合第一版 MVP 做。第一版目标应该是“可控、可解释、可验收”。</p>
 
   <ul>
     <li>不要直接用完整公共 long-read 数据集做首次测试。</li>
