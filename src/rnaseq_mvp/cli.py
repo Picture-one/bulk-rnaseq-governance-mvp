@@ -22,6 +22,7 @@ from rnaseq_mvp.preflight import (
     write_preflight_report,
 )
 from rnaseq_mvp.prepare import PreparationError, prepare_stage
+from rnaseq_mvp.public_prepare import PublicPrepareError, prepare_public_dataset
 from rnaseq_mvp.reviewer import ReviewError, record_review
 from rnaseq_mvp.runner import (
     IntegrityError,
@@ -154,6 +155,57 @@ def prepare(
     typer.echo(f"Reference manifest: {result.reference_manifest_path}")
     typer.echo(f"Samplesheet: {result.samplesheet_path}")
     typer.echo(f"Parameters: {result.parameters_path}")
+
+
+@app.command("public-prepare")
+def public_prepare(
+    accession: Annotated[
+        str,
+        typer.Option(
+            "--accession",
+            help="Public ENA study accession, for example PRJNA647610.",
+        ),
+    ],
+    dataset: Annotated[
+        str,
+        typer.Option(
+            "--dataset",
+            help="Dataset label for generated files, for example GSE154881.",
+        ),
+    ],
+    run_id: Annotated[
+        str,
+        typer.Option(
+            "--run-id",
+            help="Prepared run identifier, for example GSE154881_COUNTS_ONLY_V1.",
+        ),
+    ],
+    workspace: Annotated[
+        Path,
+        typer.Option("--workspace", help="Runtime workspace directory."),
+    ] = DEFAULT_WORKSPACE,
+) -> None:
+    """Prepare ENA public RNA-seq metadata, manifests, samplesheet, and params."""
+    try:
+        result = prepare_public_dataset(
+            accession=accession,
+            dataset=dataset,
+            run_id=run_id,
+            workspace=workspace,
+        )
+    except (PublicPrepareError, OSError) as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=int(ExitCode.PREPARE)) from error
+
+    typer.echo("Public dataset preparation completed.")
+    typer.echo(f"Layout: {result.layout}")
+    typer.echo(f"Runs: {result.run_count}")
+    typer.echo(f"FASTQ files: {result.fastq_count}")
+    typer.echo(f"ENA metadata: {result.metadata_tsv}")
+    typer.echo(f"FASTQ manifest: {result.manifest_tsv}")
+    typer.echo(f"Download script: {result.download_script}")
+    typer.echo(f"Samplesheet: {result.samplesheet_csv}")
+    typer.echo(f"Parameters: {result.params_yml}")
 
 
 @app.command()
