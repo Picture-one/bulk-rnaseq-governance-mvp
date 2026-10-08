@@ -22,7 +22,11 @@ from rnaseq_mvp.preflight import (
     write_preflight_report,
 )
 from rnaseq_mvp.prepare import PreparationError, prepare_stage
-from rnaseq_mvp.public_prepare import PublicPrepareError, prepare_public_dataset
+from rnaseq_mvp.public_prepare import (
+    PublicPrepareError,
+    prepare_public_dataset,
+    resolve_public_accession,
+)
 from rnaseq_mvp.reviewer import ReviewError, record_review
 from rnaseq_mvp.runner import (
     IntegrityError,
@@ -157,13 +161,38 @@ def prepare(
     typer.echo(f"Parameters: {result.parameters_path}")
 
 
+@app.command("public-resolve")
+def public_resolve(
+    gse: Annotated[
+        str,
+        typer.Option(
+            "--gse",
+            help="GEO Series accession to resolve, for example GSE154881.",
+        ),
+    ],
+) -> None:
+    """Resolve a GEO Series accession to a BioProject/SRA study accession."""
+    try:
+        result = resolve_public_accession(accession=gse)
+    except PublicPrepareError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=int(ExitCode.PREPARE)) from error
+
+    typer.echo(f"Query accession: {result.query_accession}")
+    typer.echo(f"Resolved accession: {result.resolved_accession}")
+    typer.echo(f"Resolution source: {result.source}")
+
+
 @app.command("public-prepare")
 def public_prepare(
     accession: Annotated[
         str,
         typer.Option(
             "--accession",
-            help="Public ENA study accession, for example PRJNA647610.",
+            help=(
+                "Public accession. Accepts PRJNA/SRP/ERP directly, or a GEO "
+                "Series accession such as GSE154881."
+            ),
         ),
     ],
     dataset: Annotated[
@@ -198,6 +227,8 @@ def public_prepare(
         raise typer.Exit(code=int(ExitCode.PREPARE)) from error
 
     typer.echo("Public dataset preparation completed.")
+    typer.echo(f"Query accession: {result.query_accession}")
+    typer.echo(f"Resolved accession: {result.resolved_accession}")
     typer.echo(f"Layout: {result.layout}")
     typer.echo(f"Runs: {result.run_count}")
     typer.echo(f"FASTQ files: {result.fastq_count}")
