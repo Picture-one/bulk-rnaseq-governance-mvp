@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
@@ -151,7 +152,12 @@ def resolve_public_accession(
             source="provided",
         )
 
-    for resolver in (_resolve_gse_from_sra_runinfo, _resolve_gse_from_ncbi_sra_xml):
+    resolvers = (
+        _resolve_gse_from_geo_soft,
+        _resolve_gse_from_sra_runinfo,
+        _resolve_gse_from_ncbi_sra_xml,
+    )
+    for resolver in resolvers:
         try:
             resolved = resolver(
                 gse=normalized,
@@ -170,6 +176,47 @@ def resolve_public_accession(
         f"Could not resolve {normalized} to a BioProject/SRA study accession. "
         "Please provide PRJNA/SRP/ERP/PRJEB directly."
     )
+
+
+def _resolve_gse_from_geo_soft(*, gse: str, timeout_seconds: float) -> str | None:
+    """Resolve a GSE from GEO SOFT Series relations.
+
+    GEO Series pages often expose relations such as:
+    !Series_relation = BioProject: https://.../PRJNA647610
+    !Series_relation = SRA: https://.../SRP273003
+    """
+    url = "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi"
+    try:
+        response = httpx.get(
+            url,
+            params={"acc": gse, "targ": "self", "form": "text", "view": "full"},
+            timeout=timeout_seconds,
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise PublicPrepareError(f"Failed to query GEO SOFT for {gse}: {exc}") from exc
+
+    bioprojects: set[str] = set()
+    studies: set[str] = set()
+    for line in response.text.splitlines():
+        if "Series_relation" not in line:
+            continue
+        bioprojects.update(re.findall(r"PRJ(?:NA|EB|DB)\d+", line))
+        studies.update(re.findall(r"(?:SRP|ERP|DRP)\d+", line))
+
+    if bioprojects:
+        return _select_single_accession(
+            sorted(bioprojects),
+            source="BioProject",
+            query=gse,
+        )
+    if studies:
+        return _select_single_accession(
+            sorted(studies),
+            source="SRAStudy",
+            query=gse,
+        )
+    return None
 
 
 def _resolve_gse_from_sra_runinfo(*, gse: str, timeout_seconds: float) -> str | None:
