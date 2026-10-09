@@ -23,7 +23,7 @@ dev = [
 ]
 
 [project.scripts]
-rnaseq-mvp = "rnaseq_mvp.cli:app"
+rnaseq-mvp = "rnaseq_mvp.cli_app:app"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
