@@ -1,4 +1,4 @@
-from rnaseq_mvp.cli import app
+from rnaseq_mvp.cli_app import app
 
 if __name__ == "__main__":
     app()
